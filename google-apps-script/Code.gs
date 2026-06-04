@@ -87,7 +87,20 @@ function runEnrichment_(options) {
 
     const username = normalizeUsername_(row.reddit_username);
     const portfolioUrl = cleanUrl_(row.portfolio_url);
-    if (!portfolioUrl) continue;
+    if (!isUsablePortfolioUrl_(portfolioUrl)) {
+      if (row.email || row.reddit_comment_url) {
+        appendObjectRow_(outreachSheet, OUTREACH_HEADERS, buildContactOnlyOutreach_(row, now));
+        appendObjectRow_(runLogSheet, RUN_LOG_HEADERS, {
+          processed_at: now,
+          reddit_username: username,
+          portfolio_url: portfolioUrl,
+          status: 'skipped',
+          notes: 'No usable portfolio URL; contact-only row'
+        });
+        processed++;
+      }
+      continue;
+    }
     if (options.skipAlreadyProcessed && alreadyProcessed[username]) continue;
 
     try {
@@ -103,11 +116,14 @@ function runEnrichment_(options) {
       });
       processed++;
     } catch (error) {
+      const fallback = buildFetchFailureEnrichment_(row, portfolioUrl, now, error);
+      appendObjectRow_(enrichmentSheet, ENRICHMENT_HEADERS, fallback);
+      appendObjectRow_(outreachSheet, OUTREACH_HEADERS, buildOutreachDraft_(row, fallback, now));
       appendObjectRow_(runLogSheet, RUN_LOG_HEADERS, {
         processed_at: now,
         reddit_username: username,
         portfolio_url: portfolioUrl,
-        status: 'error',
+        status: 'needs_review',
         notes: String(error && error.message ? error.message : error)
       });
       processed++;
@@ -115,6 +131,62 @@ function runEnrichment_(options) {
   }
 
   SpreadsheetApp.getUi().alert('UGC enrichment finished. Rows processed: ' + processed);
+}
+
+function buildFetchFailureEnrichment_(stagingRow, portfolioUrl, processedAt, error) {
+  const message = String(error && error.message ? error.message : error);
+  return {
+    reddit_username: normalizeUsername_(stagingRow.reddit_username),
+    source_post_url: stagingRow.source_post_url || '',
+    portfolio_url: portfolioUrl,
+    portfolio_url_type: stagingRow.portfolio_url_type || classifyUrl_(portfolioUrl),
+    creator_name: normalizeUsername_(stagingRow.reddit_username),
+    location: '',
+    portfolio_email: stagingRow.email || '',
+    social_links: '',
+    platform_mentions: '',
+    claimed_followers: '',
+    claimed_views: '',
+    claimed_likes: '',
+    claimed_engagement: '',
+    strongest_platform: '',
+    parent_kids_family_flag: '',
+    gender_flag: '',
+    categories_niches: '',
+    brands_worked_with: '',
+    years_creator_experience: '',
+    portfolio_summary: '',
+    confidence_score: stagingRow.email ? 35 : 15,
+    needs_review: 'Yes',
+    review_reason: 'Portfolio fetch failed: ' + message,
+    processed_at: processedAt
+  };
+}
+
+function buildContactOnlyOutreach_(stagingRow, processedAt) {
+  const email = stagingRow.email || '';
+  const username = normalizeUsername_(stagingRow.reddit_username);
+  if (email) {
+    return {
+      reddit_username: username,
+      email: email,
+      outreach_subject: 'UGC collaboration idea',
+      outreach_body: 'Hi there,\n\nI saw your comment about UGC work and wanted to reach out about a possible brand collaboration.\n\nWould you be open to hearing a little more?\n\nBest,\nBaruch',
+      outreach_status: 'Draft Ready',
+      personalized_line: 'I saw your comment about UGC work.',
+      processed_at: processedAt
+    };
+  }
+
+  return {
+    reddit_username: username,
+    email: '',
+    outreach_subject: '',
+    outreach_body: '',
+    outreach_status: stagingRow.reddit_comment_url ? 'Reddit DM Needed' : 'Missing Contact',
+    personalized_line: '',
+    processed_at: processedAt
+  };
 }
 
 function enrichPortfolio_(stagingRow, portfolioUrl, processedAt) {
@@ -441,9 +513,19 @@ function classifyUrl_(url) {
   return url ? 'personal_site' : 'none';
 }
 
+function isUsablePortfolioUrl_(url) {
+  const value = String(url || '').trim();
+  if (!value) return false;
+  if (/^mailto:/i.test(value)) return false;
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/i.test(value)) return false;
+  if (!/^https?:\/\//i.test(value)) return false;
+  return classifyUrl_(value) !== 'none';
+}
+
 function cleanUrl_(url) {
   return String(url || '')
     .replace(/&amp;/g, '&')
+    .replace(/^https?:\/\/mailto:/i, 'mailto:')
     .replace(/^\[|\]$/g, '')
     .replace(/^\(|\)$/g, '')
     .replace(/\*\*/g, '')

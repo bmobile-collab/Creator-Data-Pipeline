@@ -173,17 +173,21 @@ function toCsv(headers, rows) {
 }
 
 function cleanUrl(raw) {
-  return String(raw || '')
+  const cleaned = String(raw || '')
     .trim()
     .replace(/^<|>$/g, '')
     .replace(/^\[|\]$/g, '')
     .replace(/^\(|\)$/g, '')
     .replace(/^\*+|\*+$/g, '')
     .replace(/&amp;/gi, '&')
+    .replace(/^https?:\/\/mailto:/i, 'mailto:')
     .replace(/\\_/g, '_')
     .replace(/[.,;:!?]+$/g, '')
     .replace(/[)\]}]+$/g, '')
     .replace(/\*+$/g, '');
+  if (/^mailto:/i.test(cleaned)) return '';
+  if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/i.test(cleaned)) return '';
+  return cleaned;
 }
 
 function classifyPortfolioUrl(url) {
@@ -194,6 +198,10 @@ function classifyPortfolioUrl(url) {
   if (/\/\/(?:www\.)?canva\.com\/design\//.test(lower)) return 'canva_design';
   if (/instagram|tiktok|facebook|youtube|youtu\.be|pinterest|threads\.net|linkedin/.test(lower)) return 'social_only';
   return 'personal_site';
+}
+
+function isUsablePortfolioUrl(url) {
+  return /^https?:\/\//i.test(url) && classifyPortfolioUrl(url) !== 'none';
 }
 
 function decodeEntities(text) {
@@ -444,15 +452,16 @@ export async function enrichRow(row) {
     scrape_status: 'skipped'
   };
 
-  if (!portfolioUrl || classifyPortfolioUrl(portfolioUrl) === 'none') {
+  if (!isUsablePortfolioUrl(portfolioUrl)) {
     return {
       enriched: {
         ...base,
+        portfolio_email: row.email || '',
         needs_review: 'Yes',
-        review_reason: 'No usable portfolio URL',
+        review_reason: row.email || row.reddit_comment_url ? 'Contact-only row; no usable portfolio URL' : 'No usable portfolio URL',
         scrape_status: 'skipped'
       },
-      log: { timestamp: startedAt, reddit_username: row.reddit_username, portfolio_url: portfolioUrl, status: 'skipped', message: 'No usable portfolio URL' }
+      log: { timestamp: startedAt, reddit_username: row.reddit_username, portfolio_url: portfolioUrl, status: 'skipped', message: row.email || row.reddit_comment_url ? 'Contact-only row; no usable portfolio URL' : 'No usable portfolio URL' }
     };
   }
 
@@ -519,15 +528,16 @@ export async function enrichRow(row) {
     return {
       enriched: {
         ...base,
+        portfolio_email: row.email || '',
         needs_review: 'Yes',
         review_reason: error.name === 'AbortError' ? 'Fetch timed out' : error.message,
-        scrape_status: 'error'
+        scrape_status: 'needs_review'
       },
       log: {
         timestamp: startedAt,
         reddit_username: row.reddit_username,
         portfolio_url: portfolioUrl,
-        status: 'error',
+        status: 'needs_review',
         message: error.name === 'AbortError' ? 'Fetch timed out' : error.message
       }
     };

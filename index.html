@@ -428,10 +428,14 @@
     url = url.replace(/^\(|\)$/g, '');
     url = url.replace(/^\*+|\*+$/g, '');
     url = url.replace(/&amp;/gi, '&');
+    url = url.replace(/^https?:\/\/mailto:/i, 'mailto:');
     url = url.replace(/\\_/g, '_');
     url = url.replace(/[.,;:!?]+$/g, '');
     url = url.replace(/[)\]}]+$/g, '');
     url = url.replace(/\*+$/g, '');
+    if (/^mailto:/i.test(url)) return '';
+    if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/i.test(url)) return '';
+    if (!/^https?:\/\//i.test(url)) return '';
     return url;
   }
 
