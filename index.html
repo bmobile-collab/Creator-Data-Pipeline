@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reddit UGC Extractor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d0d0f;
+    --surface: #141416;
+    --surface-soft: rgba(255,255,255,0.035);
+    --border: #252528;
+    --accent: #ff5533;
+    --accent-2: #ff8866;
+    --text: #f0ede8;
+    --muted: #817d86;
+    --success: #33cc88;
+    --danger: #ff6b55;
+    --mono: 'DM Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+  body {
+    min-height: 100vh;
+    background: var(--bg);
+    background-image:
+      radial-gradient(ellipse at 18% 0%, rgba(255,85,51,0.08), transparent 50%),
+      radial-gradient(ellipse at 82% 100%, rgba(51,136,255,0.08), transparent 56%);
+    color: var(--text);
+    font-family: var(--sans);
+    padding: 40px 22px 56px;
+  }
+  .shell { width: min(920px, 100%); margin: 0 auto; }
+  .header { margin-bottom: 28px; }
+  .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .brand-mark {
+    width: 36px; height: 36px; border-radius: 8px; display: grid; place-items: center;
+    background: var(--accent); color: white; font-size: 18px; font-weight: 800;
+  }
+  h1 { font-size: 30px; font-weight: 800; letter-spacing: 0; }
+  .subtitle { font-family: var(--mono); font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 18px;
+  }
+  .card-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  input[type="text"] {
+    width: 100%;
+    min-height: 40px;
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 13px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    outline: none;
+  }
+  input[type="text"]:focus { border-color: var(--accent); }
+  input::placeholder { color: #58545e; }
+  .url-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: end; }
+  .config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+
+  button, .link-btn {
+    border: 0;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: var(--sans);
+    font-weight: 700;
+  }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .primary-btn {
+    min-height: 40px;
+    padding: 0 18px;
+    background: var(--accent);
+    color: white;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .primary-btn:hover:not(:disabled) { background: var(--accent-2); }
+  .secondary-btn {
+    min-height: 34px;
+    padding: 0 12px;
+    background: rgba(255,85,51,0.12);
+    border: 1px solid rgba(255,85,51,0.28);
+    color: var(--accent-2);
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+  .secondary-btn:hover:not(:disabled) { background: rgba(255,85,51,0.18); }
+
+  .url-info {
+    display: none;
+    margin-top: 14px;
+    background: rgba(255,85,51,0.06);
+    border: 1px solid rgba(255,85,51,0.2);
+    border-radius: 8px;
+    padding: 13px 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+  .json-url { margin-top: 4px; color: var(--accent-2); word-break: break-all; }
+
+  .post-meta-strip {
+    display: none;
+    margin-top: 14px;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+  .meta-pill {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 5px 11px;
+  }
+  .meta-pill .lbl { color: var(--muted); }
+  .meta-pill .val { color: var(--text); font-weight: 500; }
+  .meta-pill .hi { color: var(--accent-2); }
+
+  .pages-section { display: none; margin-top: 22px; }
+  .pages-section-title {
+    margin-bottom: 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .page-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .page-card {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    min-height: 91px;
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .page-card.ready { border-color: rgba(255,85,51,0.45); }
+  .page-card.done { border-color: rgba(51,204,136,0.45); background: rgba(51,204,136,0.04); }
+  .page-card.locked { opacity: 0.48; }
+  .page-card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .page-num {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .page-open-btn {
+    width: 100%;
+    min-height: 32px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--accent-2);
+    font-family: var(--mono);
+    font-size: 10px;
+    text-align: left;
+    padding: 0 9px;
+  }
+  .page-open-btn:hover:not(:disabled) { border-color: var(--accent); background: rgba(255,85,51,0.08); }
+  .page-card.done .page-open-btn { color: var(--success); border-color: rgba(51,204,136,0.35); }
+  .pages-hint { margin-top: 12px; font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.6; }
+
+  .drop-zone {
+    position: relative;
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 42px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.16s, background 0.16s;
+  }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: rgba(255,85,51,0.04); }
+  .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .drop-icon { font-size: 34px; margin-bottom: 11px; }
+  .drop-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+  .drop-hint { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .file-list { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+  .file-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 12px;
+    align-items: center;
+    background: var(--surface-soft);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-size { color: var(--muted); }
+  .remove-btn { background: transparent; color: var(--muted); font-size: 15px; padding: 2px 5px; }
+  .remove-btn:hover { color: var(--danger); }
+
+  .extract-btn {
+    width: 100%;
+    min-height: 54px;
+    margin-bottom: 18px;
+    background: var(--accent);
+    color: white;
+    font-size: 15px;
+    position: relative;
+    overflow: hidden;
+  }
+  .extract-btn:hover:not(:disabled) { background: var(--accent-2); }
+  .extract-btn.loading::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.16), transparent);
+    animation: shimmer 1.2s infinite;
+  }
+  @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+  #results { display: none; }
+  .stats-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+  .stat { background: var(--surface-soft); border: 1px solid var(--border); border-radius: 8px; padding: 15px; text-align: center; }
+  .stat-number { font-size: 26px; font-weight: 800; color: var(--accent-2); line-height: 1; margin-bottom: 5px; }
+  .stat-label { font-family: var(--mono); font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .log {
+    margin-top: 16px;
+    max-height: 180px;
+    overflow-y: auto;
+    background: #0a0a0c;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.8;
+    color: var(--muted);
+  }
+  .log-line.ok { color: var(--success); }
+  .log-line.err { color: var(--danger); }
+
+  @media (max-width: 720px) {
+    body { padding: 24px 14px 38px; }
+    .card { padding: 18px; }
+    .url-row, .config-grid { grid-template-columns: 1fr; }
+    .page-grid, .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 430px) {
+    .page-grid, .stats-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<main class="shell">
+  <header class="header">
+    <div class="brand">
+      <div class="brand-mark">UGC</div>
+      <h1>Reddit UGC Extractor</h1>
+    </div>
+    <div class="subtitle">// paste URL -> open JSON -> save .txt/.json -> drop files -> export staging CSV</div>
+  </header>
+
+  <section class="card">
+    <div class="card-title">Step 1 - Paste the Reddit post URL</div>
+    <div class="url-row">
+      <div class="field">
+        <label for="redditUrl">Reddit Post URL</label>
+        <input type="text" id="redditUrl" placeholder="https://www.reddit.com/r/ugc/comments/..." autocomplete="off">
+      </div>
+      <button class="primary-btn" id="openBtn" disabled type="button">Open Page 1</button>
+    </div>
+
+    <div class="url-info" id="urlInfo">
+      <div>Open this URL, copy the full JSON text, save it as page1.txt, then drop it below.</div>
+      <div class="json-url" id="jsonUrlDisplay"></div>
+      <button class="secondary-btn" id="openInfoBtn" type="button">Open in new tab</button>
+    </div>
+
+    <div class="post-meta-strip" id="postMetaStrip">
+      <div class="meta-pill"><span class="lbl">comments</span><span class="val hi" id="metaComments">-</span></div>
+      <div class="meta-pill"><span class="lbl">pages found</span><span class="val hi" id="metaPages">-</span></div>
+      <div class="meta-pill"><span class="lbl">collected</span><span class="val" id="metaCollected">0</span></div>
+    </div>
+
+    <div class="pages-section" id="pagesSection">
+      <div class="pages-section-title" id="pagesSectionTitle">Pages</div>
+      <div class="page-grid" id="pageGrid"></div>
+      <div class="pages-hint" id="pagesHint"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-title">Step 2 - Drop your .txt or .json files here</div>
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".txt,.json,application/json,text/plain" multiple>
+      <div class="drop-icon">File</div>
+      <div class="drop-title">Drop Reddit JSON files here</div>
+      <div class="drop-hint">or click to browse - drop multiple pages at once</div>
+    </div>
+    <div class="file-list" id="fileList"></div>
+  </section>
+
+  <section class="card">
+    <div class="card-title">Optional metadata</div>
+    <div class="config-grid">
+      <div class="field">
+        <label for="postTitle">Post Title</label>
+        <input type="text" id="postTitle" placeholder="auto-filled when page 1 is loaded">
+      </div>
+      <div class="field">
+        <label for="postUrl">Post URL</label>
+        <input type="text" id="postUrl" placeholder="auto-filled from URL field">
+      </div>
+    </div>
+  </section>
+
+  <button class="extract-btn" id="extractBtn" disabled type="button">Export Staging CSV</button>
+
+  <section class="card" id="results">
+    <div class="card-title">Results</div>
+    <div class="stats-grid" id="statsGrid"></div>
+    <div class="log" id="log"></div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const PER_PAGE_ESTIMATE = 372;
+  const URL_RE = /https?:\/\/[^\s)\]>"'\\]+/gi;
+  const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+  const SKIP_AUTHORS = new Set(['[deleted]', 'AutoModerator']);
+  const SKIP_BODIES = new Set(['[removed]', '[deleted]', '']);
+
+  const state = {
+    pages: [],
+    loadedFiles: [],
+    totalComments: 0,
+    pagesNeeded: 0,
+    baseUrl: ''
+  };
+
+  const $ = id => document.getElementById(id);
+  const els = {
+    redditUrl: $('redditUrl'),
+    openBtn: $('openBtn'),
+    openInfoBtn: $('openInfoBtn'),
+    urlInfo: $('urlInfo'),
+    jsonUrlDisplay: $('jsonUrlDisplay'),
+    postTitle: $('postTitle'),
+    postUrl: $('postUrl'),
+    postMetaStrip: $('postMetaStrip'),
+    metaComments: $('metaComments'),
+    metaPages: $('metaPages'),
+    metaCollected: $('metaCollected'),
+    pagesSection: $('pagesSection'),
+    pagesSectionTitle: $('pagesSectionTitle'),
+    pageGrid: $('pageGrid'),
+    pagesHint: $('pagesHint'),
+    dropZone: $('dropZone'),
+    fileInput: $('fileInput'),
+    fileList: $('fileList'),
+    extractBtn: $('extractBtn'),
+    results: $('results'),
+    statsGrid: $('statsGrid'),
+    log: $('log')
+  };
+
+  function cleanBase(raw) {
+    return raw.trim().replace(/[?#].*$/, '').replace(/\/$/, '').replace(/\.json$/i, '');
+  }
+
+  function isRedditPostUrl(raw) {
+    try {
+      const url = new URL(raw.trim());
+      return /(^|\.)reddit\.com$/i.test(url.hostname) && /\/r\/[^/]+\/comments\/[^/]+/i.test(url.pathname);
+    } catch {
+      return false;
+    }
+  }
+
+  function makeJsonUrl(base, afterFullname = '') {
+    const url = `${base}.json`;
+    const params = new URLSearchParams({ limit: '500', depth: '1' });
+    if (afterFullname) params.set('after', afterFullname);
+    return `${url}?${params.toString()}`;
+  }
+
+  function safeText(value) {
+    return String(value ?? '').replace(/[&<>"']/g, ch => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+  }
+
+  function normalizeBody(body) {
+    return String(body || '').replace(/\r?\n+/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function normalizeUrl(raw) {
+    let url = String(raw || '').trim();
+    url = url.replace(/^<|>$/g, '');
+    url = url.replace(/^\[|\]$/g, '');
+    url = url.replace(/^\(|\)$/g, '');
+    url = url.replace(/^\*+|\*+$/g, '');
+    url = url.replace(/&amp;/gi, '&');
+    url = url.replace(/\\_/g, '_');
+    url = url.replace(/[.,;:!?]+$/g, '');
+    url = url.replace(/[)\]}]+$/g, '');
+    url = url.replace(/\*+$/g, '');
+    return url;
+  }
+
+  function openUrl(url) {
+    if (url) window.open(url, '_blank', 'noopener,noreferrer');
+  }
+
+  function onUrlInput() {
+    const raw = els.redditUrl.value;
+    const valid = isRedditPostUrl(raw);
+    els.openBtn.disabled = !valid;
+
+    if (!valid) {
+      els.urlInfo.style.display = 'none';
+      return;
+    }
+
+    state.baseUrl = cleanBase(raw);
+    const page1Url = makeJsonUrl(state.baseUrl);
+    els.jsonUrlDisplay.textContent = page1Url;
+    els.urlInfo.style.display = 'block';
+    els.postUrl.value = state.baseUrl;
+  }
+
+  function readJson(content) {
+    const parsed = JSON.parse(content);
+    if (!Array.isArray(parsed) || !parsed[0] || !parsed[1]) {
+      throw new Error('This file does not look like Reddit post JSON.');
+    }
+    return parsed;
+  }
+
+  function getPostData(data) {
+    return data?.[0]?.data?.children?.[0]?.data || {};
+  }
+
+  function getCommentListing(data) {
+    return data?.[1]?.data || {};
+  }
+
+  function getComments(data) {
+    const children = getCommentListing(data).children || [];
+    return children.filter(child => child.kind === 't1').map(child => child.data);
+  }
+
+  function getAfterFullname(data, comments) {
+    const listingAfter = getCommentListing(data).after;
+    if (listingAfter) return listingAfter;
+    const more = (getCommentListing(data).children || []).find(child => child.kind === 'more');
+    const firstMoreChild = more?.data?.children?.[0];
+    if (firstMoreChild) return `t1_${firstMoreChild}`;
+    const last = comments[comments.length - 1];
+    return last?.name || (last?.id ? `t1_${last.id}` : '');
+  }
+
+  function updateMetaFromData(data) {
+    const post = getPostData(data);
+    state.totalComments = Number(post.num_comments || state.totalComments || 0);
+    state.pagesNeeded = Math.max(state.pagesNeeded, Math.ceil((state.totalComments || 1) / PER_PAGE_ESTIMATE));
+
+    if (post.title && !els.postTitle.value) els.postTitle.value = post.title;
+    els.metaComments.textContent = state.totalComments ? state.totalComments.toLocaleString() : '-';
+    els.postMetaStrip.style.display = 'flex';
+  }
+
+  function ensurePageGrid(pageCount) {
+    const count = Math.max(1, pageCount);
+    while (state.pages.length < count) {
+      const index = state.pages.length;
+      state.pages.push({
+        url: index === 0 ? makeJsonUrl(state.baseUrl || cleanBase(els.redditUrl.value)) : '',
+        after: '',
+        status: index === 0 ? 'ready' : 'locked'
+      });
+    }
+    renderPageGrid();
+    els.pagesSection.style.display = 'block';
+  }
+
+  function unlockNextPage(doneIndex, afterFullname) {
+    const nextIndex = doneIndex + 1;
+    if (!afterFullname) {
+      state.pages = state.pages.slice(0, doneIndex + 1);
+      els.pagesHint.innerHTML = '<span style="color:var(--success)">All available comment pages are captured.</span>';
+      return;
+    }
+    ensurePageGrid(nextIndex + 1);
+    state.pages[nextIndex].status = 'ready';
+    state.pages[nextIndex].after = afterFullname;
+    state.pages[nextIndex].url = makeJsonUrl(state.baseUrl || cleanBase(els.redditUrl.value), afterFullname);
+    els.pagesHint.textContent = 'Open the next unlocked JSON page, save it, then drop it here.';
+  }
+
+  function renderPageGrid() {
+    els.pagesSectionTitle.textContent = `${state.pages.length} page${state.pages.length === 1 ? '' : 's'} found`;
+    els.metaPages.textContent = String(state.pages.length || '-');
+    els.metaCollected.textContent = `${state.pages.filter(page => page.status === 'done').length} / ${state.pages.length}`;
+    els.pageGrid.innerHTML = state.pages.map((page, index) => {
+      const marker = page.status === 'done' ? 'saved' : page.status === 'ready' ? 'ready' : 'locked';
+      const label = page.status === 'done' ? 'Saved' : page.status === 'locked' ? 'Locked' : 'Open JSON';
+      return `
+        <div class="page-card ${safeText(page.status)}">
+          <div class="page-card-top">
+            <span class="page-num">Page ${index + 1}</span>
+            <span>${marker}</span>
+          </div>
+          <button class="page-open-btn" type="button" data-page-index="${index}" ${page.status === 'locked' ? 'disabled' : ''}>${label}</button>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function markDroppedPage(data) {
+    const comments = getComments(data);
+    const after = getAfterFullname(data, comments);
+    const readyIndex = state.pages.findIndex(page => page.status === 'ready');
+    const doneIndex = readyIndex >= 0 ? readyIndex : state.pages.length;
+
+    ensurePageGrid(doneIndex + 1);
+    state.pages[doneIndex].status = 'done';
+    state.pages[doneIndex].after = after || '';
+
+    if (after) unlockNextPage(doneIndex, after);
+    else {
+      state.pages = state.pages.slice(0, doneIndex + 1);
+      els.pagesHint.innerHTML = '<span style="color:var(--success)">All available comment pages are captured.</span>';
+    }
+    renderPageGrid();
+  }
+
+  function processDroppedFile(fileRecord, isFirstValidFile) {
+    try {
+      const data = readJson(fileRecord.content);
+      const comments = getComments(data);
+      if (isFirstValidFile) {
+        updateMetaFromData(data);
+        ensurePageGrid(Math.max(1, state.pagesNeeded || 1));
+      }
+      if (!comments.length) {
+        fileRecord.warning = 'No top-level comments found';
+        return;
+      }
+      markDroppedPage(data);
+    } catch (error) {
+      fileRecord.error = error.message;
+    }
+  }
+
+  function renderFileList() {
+    els.fileList.innerHTML = state.loadedFiles.map((file, index) => {
+      const status = file.error ? ` - ${file.error}` : file.warning ? ` - ${file.warning}` : '';
+      return `
+        <div class="file-item">
+          <span class="file-name">${safeText(file.name)}${safeText(status)}</span>
+          <span class="file-size">${(file.size / 1024).toFixed(1)} KB</span>
+          <button class="remove-btn" type="button" data-remove-index="${index}" aria-label="Remove ${safeText(file.name)}">x</button>
+        </div>
+      `;
+    }).join('');
+    els.extractBtn.disabled = state.loadedFiles.filter(file => !file.error).length === 0;
+  }
+
+  function resetPageStateFromFiles() {
+    state.pages = [];
+    state.totalComments = 0;
+    state.pagesNeeded = 0;
+    els.postMetaStrip.style.display = 'none';
+    els.pagesSection.style.display = 'none';
+    els.pagesHint.textContent = '';
+    els.metaCollected.textContent = '0';
+    state.loadedFiles.forEach((file, index) => processDroppedFile(file, index === 0));
+    renderFileList();
+  }
+
+  function handleFiles(files) {
+    const sorted = [...files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    sorted.forEach(file => {
+      if (state.loadedFiles.some(existing => existing.name === file.name && existing.size === file.size)) return;
+      const reader = new FileReader();
+      reader.onload = event => {
+        const record = { name: file.name, size: file.size, content: String(event.target.result || '') };
+        const isFirstValidFile = state.loadedFiles.filter(item => !item.error).length === 0;
+        state.loadedFiles.push(record);
+        processDroppedFile(record, isFirstValidFile);
+        renderFileList();
+      };
+      reader.onerror = () => {
+        state.loadedFiles.push({ name: file.name, size: file.size, content: '', error: 'Could not read file' });
+        renderFileList();
+      };
+      reader.readAsText(file);
+    });
+    els.fileInput.value = '';
+  }
+
+  function parseComments(content) {
+    try {
+      return getComments(readJson(content));
+    } catch {
+      return [];
+    }
+  }
+
+  function classifyPortfolioUrl(url) {
+    if (!url) return 'none';
+    const lower = url.toLowerCase();
+    if (/\/\/[^/]*\.my\.canva\.site\b/.test(lower)) return 'canva_site';
+    if (/\/\/canva\.link\b/.test(lower)) return 'canva_link';
+    if (/\/\/(?:www\.)?canva\.com\/design\//.test(lower)) return 'canva_design';
+    if (/instagram|tiktok|facebook|youtube|youtu\.be|pinterest|threads\.net|linkedin/.test(lower)) return 'social_only';
+    return 'personal_site';
+  }
+
+  function chooseBestUrl(urls) {
+    const lower = url => url.toLowerCase();
+    return urls.find(url => classifyPortfolioUrl(url) === 'canva_site') ||
+      urls.find(url => classifyPortfolioUrl(url) === 'canva_link') ||
+      urls.find(url => classifyPortfolioUrl(url) === 'canva_design') ||
+      urls.find(url => /portfolio|ugc|creator|content|linktr\.ee|beacons|stan\.store|hoo\.be|msha\.ke|withkoji|carrd\.co|\.com|\.site|\.io/i.test(url) && classifyPortfolioUrl(url) !== 'social_only') ||
+      urls.find(url => /instagram|tiktok|facebook|youtube|youtu\.be|pinterest|threads\.net/i.test(lower(url))) ||
+      urls[0] ||
+      '';
+  }
+
+  function hasMeaningfulSignal(body, urls, emails) {
+    if (urls.length || emails.length) return true;
+    const normalized = body.toLowerCase().replace(/[^\w\s+]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!normalized) return false;
+    const weakOnly = /^(i'?m |im |i am )?(very |definitely |super |really )?(interested|intrested|interested in this|dm sent|sent you a dm|sent dm|please dm me|pick me|love to hear more|hello|hi|hey|good morning|interested!*)$/i;
+    if (weakOnly.test(normalized)) return false;
+    return /\b(ugc|creator|portfolio|mom|mother|parent|kids|dog|cat|pet|experience|years?|brands?|tiktok|instagram|facebook|followers?|views?|engagement|content|lifestyle|beauty|wellness|fitness|tech|saas|travel|food|fashion|home|clean|organic)\b/i.test(body);
+  }
+
+  function extractRow(comment) {
+    const author = comment.author || '';
+    const body = normalizeBody(comment.body || '');
+    if (!author || SKIP_AUTHORS.has(author) || SKIP_BODIES.has(body)) return null;
+
+    const urls = [...new Set((body.match(URL_RE) || []).map(normalizeUrl).filter(Boolean))];
+    const emails = [...new Set((body.match(EMAIL_RE) || []).map(email => email.toLowerCase()))];
+    if (!hasMeaningfulSignal(body, urls, emails)) return null;
+    const canvaUrls = urls.filter(url => url.toLowerCase().includes('canva'));
+    const portfolioUrl = chooseBestUrl(urls);
+    const portfolioUrlType = classifyPortfolioUrl(portfolioUrl);
+    const contactMethod = emails[0] ? 'Email' : (comment.permalink ? 'Reddit DM' : 'Missing');
+    const ingestNotes = [];
+    if (!portfolioUrl) ingestNotes.push('No portfolio URL found');
+    if (!emails[0]) ingestNotes.push('No email found');
+    if (portfolioUrl && /\.\.\./.test(portfolioUrl)) ingestNotes.push('Portfolio URL appears truncated');
+
+    return {
+      author,
+      portfolioUrl,
+      portfolioUrlType,
+      email: emails[0] || '',
+      allUrls: urls.join(' | '),
+      allEmails: emails.join(' | '),
+      snippet: body.slice(0, 220),
+      score: Number(comment.score || 0),
+      hasCanva: canvaUrls.length ? 'Yes' : 'No',
+      canvaUrl: canvaUrls[0] || '',
+      datePosted: comment.created_utc ? new Date(comment.created_utc * 1000).toISOString().slice(0, 10) : '',
+      permalink: comment.permalink ? `https://www.reddit.com${comment.permalink}` : '',
+      needsContactMethod: contactMethod,
+      ingestStatus: 'Ready',
+      ingestNotes: ingestNotes.join(' | ')
+    };
+  }
+
+  function mergeRows(existing, incoming) {
+    const bestPortfolioUrl = chooseBestUrl([existing.portfolioUrl, incoming.portfolioUrl].filter(Boolean));
+    const bestSnippet = /@|https?:\/\//i.test(incoming.snippet) && !/@|https?:\/\//i.test(existing.snippet)
+      ? incoming.snippet
+      : (incoming.snippet.length > existing.snippet.length ? incoming.snippet : existing.snippet);
+    const allUrls = [...new Set([existing.allUrls, incoming.allUrls].join(' | ').split(' | ').filter(Boolean))].join(' | ');
+    const allEmails = [...new Set([existing.allEmails, incoming.allEmails].join(' | ').split(' | ').filter(Boolean))].join(' | ');
+    const email = existing.email || incoming.email;
+    const notes = [...new Set([existing.ingestNotes, incoming.ingestNotes].join(' | ').split(' | ').filter(Boolean))].join(' | ');
+    return {
+      ...existing,
+      portfolioUrl: bestPortfolioUrl,
+      portfolioUrlType: classifyPortfolioUrl(bestPortfolioUrl),
+      email,
+      allUrls,
+      allEmails,
+      snippet: bestSnippet,
+      score: Math.max(existing.score, incoming.score),
+      hasCanva: existing.hasCanva === 'Yes' || incoming.hasCanva === 'Yes' ? 'Yes' : 'No',
+      canvaUrl: existing.canvaUrl || incoming.canvaUrl,
+      datePosted: existing.datePosted || incoming.datePosted,
+      permalink: existing.permalink || incoming.permalink,
+      needsContactMethod: email ? 'Email' : ((existing.permalink || incoming.permalink) ? 'Reddit DM' : 'Missing'),
+      ingestNotes: notes
+    };
+  }
+
+  function collectRows() {
+    const byAuthor = new Map();
+    state.loadedFiles.forEach(file => {
+      parseComments(file.content).forEach(comment => {
+        const row = extractRow(comment);
+        if (!row) return;
+        const key = row.author.toLowerCase();
+        byAuthor.set(key, byAuthor.has(key) ? mergeRows(byAuthor.get(key), row) : row);
+      });
+    });
+    return [...byAuthor.values()];
+  }
+
+  function logLine(message, type = '') {
+    els.log.innerHTML += `<div class="log-line ${safeText(type)}">${safeText(message)}</div>`;
+    els.log.scrollTop = els.log.scrollHeight;
+  }
+
+  const STAGING_HEADERS = [
+    'source_platform',
+    'source_post_url',
+    'source_post_title',
+    'reddit_username',
+    'email',
+    'portfolio_url',
+    'portfolio_url_type',
+    'all_urls',
+    'all_emails',
+    'comment_snippet',
+    'upvotes_max',
+    'date_posted',
+    'reddit_comment_url',
+    'has_canva',
+    'needs_contact_method',
+    'ingest_status',
+    'ingest_notes'
+  ];
+
+  function rowsToStagingRows(rows) {
+    const postTitle = els.postTitle.value || 'Reddit UGC Post';
+    const postUrl = els.postUrl.value || state.baseUrl || '';
+    return rows.map(row => [
+      'reddit',
+      postUrl,
+      postTitle,
+      row.author,
+      row.email,
+      row.portfolioUrl,
+      row.portfolioUrlType || classifyPortfolioUrl(row.portfolioUrl),
+      row.allUrls,
+      row.allEmails,
+      row.snippet,
+      row.score,
+      row.datePosted,
+      row.permalink,
+      row.hasCanva,
+      row.needsContactMethod,
+      row.ingestStatus || 'Ready',
+      row.ingestNotes || ''
+    ]);
+  }
+
+  function rowsToWorkbookRows(rows) {
+    return rows.map(row => [
+      row.author,
+      row.portfolioUrl,
+      row.portfolioUrlType || classifyPortfolioUrl(row.portfolioUrl),
+      row.email,
+      row.allUrls,
+      row.allEmails,
+      row.snippet,
+      row.score,
+      row.hasCanva,
+      row.datePosted,
+      row.permalink,
+      row.needsContactMethod,
+      row.ingestNotes || ''
+    ]);
+  }
+
+  function getExportModel(rows) {
+    const postTitle = els.postTitle.value || 'Reddit UGC Post';
+    const postUrl = els.postUrl.value || state.baseUrl || '';
+    const workbookHeaders = [
+      'Reddit Username', 'Best Portfolio URL', 'Portfolio URL Type', 'Email', 'All URLs', 'All Emails',
+      'Comment Snippet', 'Upvotes Max', 'Has Canva', 'Date Posted', 'Reddit Comment URL', 'Contact Method', 'Ingest Notes'
+    ];
+    const canvaRows = rows.filter(row => row.hasCanva === 'Yes');
+    const emailRows = rows.filter(row => row.email);
+    const contactReadyRows = rows.filter(row => row.email && row.portfolioUrl);
+    const summaryRows = [
+      ['UGC Creator Extraction Summary', ''],
+      ['', ''],
+      ['Post Title', postTitle],
+      ['Post URL', postUrl],
+      ['Total Comments Reported', state.totalComments || '-'],
+      ['Files Loaded', state.loadedFiles.length],
+      ['Pages Saved', state.pages.filter(page => page.status === 'done').length],
+      ['Extracted On', new Date().toLocaleString()],
+      ['', ''],
+      ['Total Creators', rows.length],
+      ['With Portfolio URL', rows.filter(row => row.portfolioUrl).length],
+      ['With Canva', canvaRows.length],
+      ['With Email', emailRows.length],
+      ['Email + Portfolio', contactReadyRows.length]
+    ];
+
+    return {
+      stagingHeaders: STAGING_HEADERS,
+      workbookHeaders,
+      canvaRows,
+      contactReadyRows,
+      summaryRows,
+      canvaByUpvotes: [...canvaRows].sort((a, b) => b.score - a.score)
+    };
+  }
+
+  function csvEscape(value) {
+    const text = String(value ?? '');
+    return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  }
+
+  function downloadTextFile(filename, text) {
+    const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadCsv(filename, rows) {
+    downloadTextFile(filename, rows.map(row => row.map(csvEscape).join(',')).join('\n'));
+  }
+
+  function buildStagingCsv(rows) {
+    const date = new Date().toISOString().slice(0, 10);
+    downloadCsv(`ugc_staging_export_${date}.csv`, [STAGING_HEADERS, ...rowsToStagingRows(rows)]);
+    logLine(`Downloaded ugc_staging_export_${date}.csv`, 'ok');
+  }
+
+  function buildCsvFallback(rows) {
+    const model = getExportModel(rows);
+    const date = new Date().toISOString().slice(0, 10);
+    downloadCsv(`ugc_staging_export_${date}.csv`, [model.stagingHeaders, ...rowsToStagingRows(rows)]);
+    downloadCsv(`ugc_creators_review_${date}.csv`, [model.workbookHeaders, ...rowsToWorkbookRows(rows)]);
+    downloadCsv(`ugc_creators_summary_${date}.csv`, model.summaryRows);
+    logLine('Excel library was unavailable, so staging/review CSV files were downloaded instead.', 'ok');
+  }
+
+  function buildExports(rows) {
+    buildStagingCsv(rows);
+
+    if (!window.XLSX) {
+      return;
+    }
+
+    const model = getExportModel(rows);
+    const cols = [18, 42, 18, 28, 60, 42, 55, 10, 10, 12, 50, 14, 32].map(wch => ({ wch }));
+    const wb = XLSX.utils.book_new();
+    const makeSheet = data => {
+      const ws = XLSX.utils.aoa_to_sheet([model.workbookHeaders, ...rowsToWorkbookRows(data)]);
+      ws['!cols'] = cols;
+      return ws;
+    };
+
+    const stagingWs = XLSX.utils.aoa_to_sheet([model.stagingHeaders, ...rowsToStagingRows(rows)]);
+    stagingWs['!cols'] = [16, 50, 40, 22, 30, 48, 18, 60, 42, 55, 12, 12, 52, 10, 18, 14, 36].map(wch => ({ wch }));
+    XLSX.utils.book_append_sheet(wb, stagingWs, 'HTML Staging');
+    XLSX.utils.book_append_sheet(wb, makeSheet(rows), 'Review');
+    XLSX.utils.book_append_sheet(wb, makeSheet(model.contactReadyRows), 'Contact Ready');
+
+    const summary = XLSX.utils.aoa_to_sheet(model.summaryRows);
+    summary['!cols'] = [{ wch: 28 }, { wch: 70 }];
+    XLSX.utils.book_append_sheet(wb, summary, 'Summary');
+
+    const filename = `ugc_staging_review_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    XLSX.writeFile(wb, filename);
+    logLine(`Downloaded ${filename}`, 'ok');
+  }
+
+  function renderStats(rows) {
+    const stats = [
+      [rows.length, 'Staging Rows'],
+      [rows.filter(row => row.hasCanva === 'Yes').length, 'Canva Portfolios'],
+      [rows.filter(row => row.email).length, 'With Email'],
+      [rows.filter(row => row.needsContactMethod === 'Reddit DM').length, 'Reddit DM Needed']
+    ];
+    els.statsGrid.innerHTML = stats.map(([number, label]) => `
+      <div class="stat">
+        <div class="stat-number">${number}</div>
+        <div class="stat-label">${safeText(label)}</div>
+      </div>
+    `).join('');
+  }
+
+  function runExtraction() {
+    els.results.style.display = 'block';
+    els.log.innerHTML = '';
+    els.statsGrid.innerHTML = '';
+    els.extractBtn.classList.add('loading');
+    els.extractBtn.disabled = true;
+
+    setTimeout(() => {
+      try {
+        state.loadedFiles.forEach(file => {
+          const comments = parseComments(file.content);
+          logLine(`${file.name} -> ${comments.length} comments${file.error ? ` (${file.error})` : ''}`);
+        });
+
+        const rows = collectRows();
+        renderStats(rows);
+        logLine('----------------------------------------');
+        logLine(`${rows.length} staging rows`, 'ok');
+        logLine(`${rows.filter(row => row.hasCanva === 'Yes').length} Canva portfolios`, 'ok');
+        logLine(`${rows.filter(row => row.email).length} with emails`, 'ok');
+        logLine(`${rows.filter(row => row.needsContactMethod === 'Reddit DM').length} Reddit DM needed`, 'ok');
+
+        buildExports(rows);
+      } catch (error) {
+        logLine(error.message, 'err');
+      } finally {
+        els.extractBtn.classList.remove('loading');
+        els.extractBtn.disabled = state.loadedFiles.filter(file => !file.error).length === 0;
+      }
+    }, 40);
+  }
+
+  els.redditUrl.addEventListener('input', onUrlInput);
+  els.openBtn.addEventListener('click', () => openUrl(makeJsonUrl(state.baseUrl || cleanBase(els.redditUrl.value))));
+  els.openInfoBtn.addEventListener('click', () => openUrl(makeJsonUrl(state.baseUrl || cleanBase(els.redditUrl.value))));
+  els.pageGrid.addEventListener('click', event => {
+    const button = event.target.closest('[data-page-index]');
+    if (!button) return;
+    const page = state.pages[Number(button.dataset.pageIndex)];
+    openUrl(page?.url);
+  });
+  els.dropZone.addEventListener('dragover', event => {
+    event.preventDefault();
+    els.dropZone.classList.add('drag-over');
+  });
+  els.dropZone.addEventListener('dragleave', () => els.dropZone.classList.remove('drag-over'));
+  els.dropZone.addEventListener('drop', event => {
+    event.preventDefault();
+    els.dropZone.classList.remove('drag-over');
+    handleFiles(event.dataTransfer.files);
+  });
+  els.fileInput.addEventListener('change', () => handleFiles(els.fileInput.files));
+  els.fileList.addEventListener('click', event => {
+    const button = event.target.closest('[data-remove-index]');
+    if (!button) return;
+    state.loadedFiles.splice(Number(button.dataset.removeIndex), 1);
+    resetPageStateFromFiles();
+  });
+  els.extractBtn.addEventListener('click', runExtraction);
+})();
+</script>
+</body>
+</html>
