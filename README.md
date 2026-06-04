@@ -6,8 +6,10 @@ Lightweight POC for turning Reddit UGC creator comments into a clean staging CSV
 
 - `index.html` - browser-based Reddit UGC extractor, ready for GitHub Pages.
 - `scripts/enrich_ugc_poc.mjs` - local enrichment script for staging CSV files.
+- `google-apps-script/Code.gs` - Google Sheets menu runner for enrichment.
 - `samples/sample_ugc_staging_export.csv` - tiny sample input for testing.
 - `docs/POC_README.md` - guided workflow for export, enrichment, and Google Sheets import.
+- `docs/GOOGLE_SHEETS_APPS_SCRIPT.md` - click-by-click setup for the Sheets runner.
 
 ## Quick Start
 
@@ -28,6 +30,17 @@ The script writes:
 - `portfolio_enrichment.csv`
 - `outreach_drafts.csv`
 - `run_log.csv`
+
+## Run Enrichment In Google Sheets
+
+Use the Apps Script runner if you want the POC to stay mostly inside Google Sheets:
+
+1. Import the staging CSV into a tab named `HTML Staging`.
+2. Copy `google-apps-script/Code.gs` into `Extensions > Apps Script`.
+3. Refresh the Sheet.
+4. Use `UGC Pipeline > Run first 10 enrichments`.
+
+Full guide: `docs/GOOGLE_SHEETS_APPS_SCRIPT.md`
 
 ## Safety Notes
 
