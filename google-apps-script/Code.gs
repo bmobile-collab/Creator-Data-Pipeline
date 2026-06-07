@@ -193,11 +193,26 @@ function normalizeOutreachQueue_(sheet) {
   const maxRows = Math.min(sheet.getMaxRows(), 1000);
   if (maxRows < 2) return;
 
-  sheet.getRange('E2:E' + maxRows).setFormulaR1C1('=IF(RC[-1]="","",CHOOSE(MOD(ROW()-2,4)+1,"T031","T032","T033","T034"))');
-  sheet.getRange('F2:F' + maxRows).setFormulaR1C1('=IF(RC[-1]="","",SUBSTITUTE(INDEX(\'Template Library\'!C:C,MATCH(RC[-1],\'Template Library\'!A:A,0)),"{brand_name}","this brand campaign"))');
-  sheet.getRange('G2:G' + maxRows).setFormulaR1C1('=IF(RC[-2]="","",SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(INDEX(\'Template Library\'!D:D,MATCH(RC[-2],\'Template Library\'!A:A,0)),"{creator_greeting}","there"),"{brand_name}","this brand campaign: "&Campaigns!R2C14),"{sender_name}",INDEX(\'Agent Control\'!B:B,MATCH("sender_name",\'Agent Control\'!A:A,0))))');
-  sheet.getRange('H2:H' + maxRows).setFormulaR1C1('=IF(RC[-4]="","","Needs Approval")');
-  sheet.getRange('I2:I' + maxRows).setValue('FALSE');
+  const rowCount = maxRows - 1;
+  const templateFormulas = [];
+  const subjectFormulas = [];
+  const bodyFormulas = [];
+  const statusFormulas = [];
+  const approvalValues = [];
+
+  for (let row = 2; row <= maxRows; row += 1) {
+    templateFormulas.push([`=IF(D${row}="","",CHOOSE(MOD(ROW()-2,4)+1,"T031","T032","T033","T034"))`]);
+    subjectFormulas.push([`=IF(E${row}="","",SUBSTITUTE(INDEX('Template Library'!C:C,MATCH(E${row},'Template Library'!A:A,0)),"{brand_name}","this brand campaign"))`]);
+    bodyFormulas.push([`=IF(E${row}="","",SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(INDEX('Template Library'!D:D,MATCH(E${row},'Template Library'!A:A,0)),"{creator_greeting}","there"),"{brand_name}","this brand campaign: "&Campaigns!N$2),"{sender_name}",INDEX('Agent Control'!B:B,MATCH("sender_name",'Agent Control'!A:A,0))))`]);
+    statusFormulas.push([`=IF(D${row}="","","Needs Approval")`]);
+    approvalValues.push(['FALSE']);
+  }
+
+  sheet.getRange(2, 5, rowCount, 1).setFormulas(templateFormulas);
+  sheet.getRange(2, 6, rowCount, 1).setFormulas(subjectFormulas);
+  sheet.getRange(2, 7, rowCount, 1).setFormulas(bodyFormulas);
+  sheet.getRange(2, 8, rowCount, 1).setFormulas(statusFormulas);
+  sheet.getRange(2, 9, rowCount, 1).setValues(approvalValues);
 }
 
 function appendAgentRunLog_(sheet, now) {
