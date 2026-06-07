@@ -12,6 +12,7 @@ Lightweight POC for turning Reddit UGC creator comments into a clean staging CSV
 - `docs/POC_README.md` - guided workflow for export, enrichment, and Google Sheets import.
 - `docs/GOOGLE_SHEETS_APPS_SCRIPT.md` - click-by-click setup for the Sheets runner.
 - `docs/STORAGE_ORGANIZATION.md` - scalable folder and file storage rules.
+- `AGENT_README.md` - operating contract for any agent or automation harness.
 
 ## Quick Start
 
