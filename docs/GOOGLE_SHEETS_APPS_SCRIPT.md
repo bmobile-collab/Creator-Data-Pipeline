@@ -15,6 +15,7 @@ The Apps Script reads rows from a Google Sheets tab named `HTML Staging`, fetche
 - `Review Queue`
 - `Outreach Queue`
 - `MVP Control Center`
+- `Approved Outreach Export`
 - archive tabs for previous runs
 
 It does not send emails.
@@ -100,11 +101,38 @@ It shows:
 - blocked outreach count
 - needs-approval count
 - approved-to-send count
+- approved export row count
 - last archive run ID
 - last populate run timestamp
+- last approved export timestamp
 - agent safety controls
 
 Anything marked `Fix`, `Check`, or `Review` needs attention before outreach moves forward.
+
+## Export Approved Outreach List
+
+Use this only after reviewing `Review Queue` and confirming `Outreach Queue` has rows marked `Approved To Send`.
+
+Click:
+
+```text
+UGC Pipeline > Export Approved Outreach List
+```
+
+The script writes a clean tab:
+
+```text
+Approved Outreach Export
+```
+
+It only exports rows where:
+
+- `outreach_status` is `Approved To Send`
+- `approved_by_human` is `TRUE`
+- email exists
+- `Campaigns!N2` has a brand media room URL
+
+No emails are sent. This is only a final human-review export.
 
 ## Starting A New HTML Staging Run
 

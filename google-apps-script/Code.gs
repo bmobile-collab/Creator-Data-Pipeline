@@ -75,6 +75,18 @@ const AGENT_RUN_LOG_HEADERS = [
 
 const AGENT_CONTROL_HEADERS = ['control_key', 'control_value', 'description'];
 const CONTROL_CENTER_SHEET = 'MVP Control Center';
+const APPROVED_EXPORT_SHEET = 'Approved Outreach Export';
+const APPROVED_EXPORT_HEADERS = [
+  'exported_at',
+  'campaign_id',
+  'creator_id',
+  'email',
+  'outreach_subject',
+  'outreach_body',
+  'brand_media_room_url',
+  'approval_status',
+  'notes'
+];
 
 const ARCHIVE_SHEET_MAP = [
   { source: STAGING_SHEET, archive: 'Archive - HTML Staging' },
@@ -147,6 +159,7 @@ function onOpen() {
     .addItem('Archive Current Run + Reset For New Staging', 'archiveCurrentRunAndResetForNewStaging')
     .addItem('Populate MVP From HTML Staging', 'populateMvpFromHtmlStaging')
     .addItem('Refresh MVP Control Center', 'refreshMvpControlCenter')
+    .addItem('Export Approved Outreach List', 'exportApprovedOutreachList')
     .addSeparator()
     .addItem('Run first 10 enrichments', 'runFirst10Enrichments')
     .addItem('Run next blank enrichments', 'runNextBlankEnrichments')
@@ -425,14 +438,72 @@ function refreshMvpControlCenter_(ss) {
     ['approved_to_send_count', '=COUNTIFS(\'Outreach Queue\'!A:A,"<>",\'Outreach Queue\'!H:H,"Approved To Send")', '=IF(B14>0,"Ready","Info")', 'Drafts unlocked by human approval.'],
     ['last_archive_run_id', '=IFERROR(INDEX(\'Archive Index\'!A:A,MAX(FILTER(ROW(\'Archive Index\'!A:A),\'Archive Index\'!A:A<>"",\'Archive Index\'!A:A<>"archive_run_id"))),"None")', '=IF(B15="None","Info","OK")', 'Most recent archive snapshot ID.'],
     ['last_populate_run_at', '=IFERROR(INDEX(\'Agent Run Log\'!C:C,MAX(FILTER(ROW(\'Agent Run Log\'!E:E),\'Agent Run Log\'!E:E="populate_from_html_staging"))),"None")', '=IF(B16="None","Check","OK")', 'Most recent staging-to-MVP populate run.'],
-    ['agent_mode', '=IFERROR(INDEX(\'Agent Control\'!B:B,MATCH("agent_mode",\'Agent Control\'!A:A,0)),"Missing")', '=IF(B17="manual_approval_required","OK","Fix")', 'Hermes/agent must remain human approval gated.'],
-    ['auto_outreach_allowed', '=IFERROR(INDEX(\'Agent Control\'!B:B,MATCH("allow_auto_outreach",\'Agent Control\'!A:A,0)),"Missing")', '=IF(B18="No","OK","Fix")', 'Must stay No for MVP.']
+    ['approved_export_rows', '=MAX(COUNTA(\'Approved Outreach Export\'!C:C)-1,0)', '=IF(B17>0,"Ready","Info")', 'Rows currently available in Approved Outreach Export.'],
+    ['last_approved_export_at', '=IFERROR(INDEX(\'Agent Run Log\'!C:C,MAX(FILTER(ROW(\'Agent Run Log\'!E:E),\'Agent Run Log\'!E:E="export_approved_outreach"))),"None")', '=IF(B18="None","Info","OK")', 'Most recent approved export run.'],
+    ['agent_mode', '=IFERROR(INDEX(\'Agent Control\'!B:B,MATCH("agent_mode",\'Agent Control\'!A:A,0)),"Missing")', '=IF(B19="manual_approval_required","OK","Fix")', 'Hermes/agent must remain human approval gated.'],
+    ['auto_outreach_allowed', '=IFERROR(INDEX(\'Agent Control\'!B:B,MATCH("allow_auto_outreach",\'Agent Control\'!A:A,0)),"Missing")', '=IF(B20="No","OK","Fix")', 'Must stay No for MVP.']
   ];
 
   sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
   sheet.setFrozenRows(1);
   sheet.getRange('A1:D1').setFontWeight('bold');
   sheet.autoResizeColumns(1, 4);
+}
+
+function exportApprovedOutreachList() {
+  const ss = SpreadsheetApp.getActive();
+  const ui = SpreadsheetApp.getUi();
+  const now = new Date().toISOString();
+  const campaigns = ensureSheet_(ss, 'Campaigns', CAMPAIGNS_HEADERS);
+  const outreach = ensureSheet_(ss, 'Outreach Queue', OUTREACH_QUEUE_HEADERS);
+  const agentRunLog = ensureSheet_(ss, 'Agent Run Log', AGENT_RUN_LOG_HEADERS);
+  const exportSheet = ensureSheet_(ss, APPROVED_EXPORT_SHEET, APPROVED_EXPORT_HEADERS);
+  const mediaRoomUrl = String(campaigns.getRange('N2').getDisplayValue() || '').trim();
+
+  if (!mediaRoomUrl || mediaRoomUrl.toUpperCase() === 'MISSING') {
+    ui.alert('Export blocked. Campaigns!N2 must contain the brand media room URL.');
+    return;
+  }
+
+  const rows = readSheetObjects_(outreach)
+    .filter(function (row) {
+      return row.email &&
+        row.outreach_status === 'Approved To Send' &&
+        String(row.approved_by_human || '').toUpperCase() === 'TRUE';
+    })
+    .map(function (row) {
+      return [
+        now,
+        row.campaign_id || '',
+        row.creator_id || '',
+        row.email || '',
+        row.outreach_subject || '',
+        row.outreach_body || '',
+        mediaRoomUrl,
+        'Approved To Send',
+        row.notes || ''
+      ];
+    });
+
+  exportSheet.clearContents();
+  exportSheet.getRange(1, 1, 1, APPROVED_EXPORT_HEADERS.length).setValues([APPROVED_EXPORT_HEADERS]);
+  if (rows.length) {
+    exportSheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+  }
+  exportSheet.setFrozenRows(1);
+  exportSheet.getRange('A1:I1').setFontWeight('bold');
+  exportSheet.autoResizeColumns(1, APPROVED_EXPORT_HEADERS.length);
+
+  appendAgentRunLogEntry_(agentRunLog, {
+    step: 'export_approved_outreach',
+    action_taken: 'Created Approved Outreach Export from approved outreach rows',
+    input_ref: 'Outreach Queue',
+    output_ref: APPROVED_EXPORT_SHEET,
+    status: 'Complete',
+    notes: 'Rows exported: ' + rows.length
+  });
+  refreshMvpControlCenter_(ss);
+  ui.alert('Approved Outreach Export complete. Rows exported: ' + rows.length);
 }
 
 function archiveSheetValues_(ss, sourceName, archiveName, metadata) {
