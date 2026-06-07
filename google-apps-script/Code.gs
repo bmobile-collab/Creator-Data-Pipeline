@@ -74,6 +74,7 @@ const AGENT_RUN_LOG_HEADERS = [
 ];
 
 const AGENT_CONTROL_HEADERS = ['control_key', 'control_value', 'description'];
+const CONTROL_CENTER_SHEET = 'MVP Control Center';
 
 const ARCHIVE_SHEET_MAP = [
   { source: STAGING_SHEET, archive: 'Archive - HTML Staging' },
@@ -145,6 +146,7 @@ function onOpen() {
     .addSeparator()
     .addItem('Archive Current Run + Reset For New Staging', 'archiveCurrentRunAndResetForNewStaging')
     .addItem('Populate MVP From HTML Staging', 'populateMvpFromHtmlStaging')
+    .addItem('Refresh MVP Control Center', 'refreshMvpControlCenter')
     .addSeparator()
     .addItem('Run first 10 enrichments', 'runFirst10Enrichments')
     .addItem('Run next blank enrichments', 'runNextBlankEnrichments')
@@ -169,7 +171,8 @@ function setupAgentFirstMvp() {
       'ok_count', 'needs_review_count', 'error_count', 'notes'
     ]),
     agentRunLog: ensureSheet_(ss, 'Agent Run Log', AGENT_RUN_LOG_HEADERS),
-    agentControl: ensureSheet_(ss, 'Agent Control', AGENT_CONTROL_HEADERS)
+    agentControl: ensureSheet_(ss, 'Agent Control', AGENT_CONTROL_HEADERS),
+    controlCenter: ensureSheet_(ss, CONTROL_CENTER_SHEET, ['metric', 'value', 'status', 'notes'])
   };
 
   seedAgentControl_(sheets.agentControl);
@@ -177,6 +180,7 @@ function setupAgentFirstMvp() {
   seedTemplatePerformance_(sheets.templatePerformance);
   applyAgentValidations_(sheets);
   normalizeOutreachQueue_(sheets.outreach);
+  refreshMvpControlCenter_(ss);
   appendAgentRunLog_(sheets.agentRunLog, now);
 
   SpreadsheetApp.getUi().alert('Agent-first MVP setup complete. Check Agent Control, dropdowns, and Outreach Queue.');
@@ -225,6 +229,7 @@ function archiveCurrentRunAndResetForNewStaging() {
   });
 
   setControlValue_(agentControl, 'active_round_id', nextRoundId_(roundId));
+  refreshMvpControlCenter_(ss);
   appendAgentRunLogEntry_(agentRunLog, {
     step: 'archive_reset',
     action_taken: 'Archived active run and cleared working tabs for new HTML Staging',
@@ -265,7 +270,8 @@ function populateMvpFromHtmlStaging() {
     templateLibrary: ensureSheet_(ss, 'Template Library', TEMPLATE_LIBRARY_HEADERS),
     templatePerformance: ensureSheet_(ss, 'Template Performance', TEMPLATE_PERFORMANCE_HEADERS),
     agentControl: ensureSheet_(ss, 'Agent Control', AGENT_CONTROL_HEADERS),
-    agentRunLog: ensureSheet_(ss, 'Agent Run Log', AGENT_RUN_LOG_HEADERS)
+    agentRunLog: ensureSheet_(ss, 'Agent Run Log', AGENT_RUN_LOG_HEADERS),
+    controlCenter: ensureSheet_(ss, CONTROL_CENTER_SHEET, ['metric', 'value', 'status', 'notes'])
   };
 
   seedSafeTemplates_(sheets.templateLibrary);
@@ -388,8 +394,45 @@ function populateMvpFromHtmlStaging() {
     status: 'Complete',
     notes: 'Rows populated: ' + stagingRows.length
   });
+  refreshMvpControlCenter_(ss);
 
   ui.alert('MVP tabs populated from HTML Staging. Creator rows: ' + stagingRows.length + '. Review Queue approvals now control Outreach Queue.');
+}
+
+function refreshMvpControlCenter() {
+  refreshMvpControlCenter_(SpreadsheetApp.getActive());
+  SpreadsheetApp.getUi().alert('MVP Control Center refreshed.');
+}
+
+function refreshMvpControlCenter_(ss) {
+  const sheet = ensureSheet_(ss, CONTROL_CENTER_SHEET, ['metric', 'value', 'status', 'notes']);
+  sheet.clearContents();
+
+  const rows = [
+    ['metric', 'value', 'status', 'notes'],
+    ['current_round_id', '=IFERROR(INDEX(\'Agent Control\'!B:B,MATCH("active_round_id",\'Agent Control\'!A:A,0)),"Missing")', '=IF(B2="Missing","Fix","OK")', 'Active sourcing round for this workbook.'],
+    ['active_campaign_id', '=IFERROR(INDEX(\'Agent Control\'!B:B,MATCH("active_campaign_id",\'Agent Control\'!A:A,0)),"Missing")', '=IF(B3="Missing","Fix","OK")', 'Campaign used by Matches and Outreach Queue.'],
+    ['brand_media_room_url', '=Campaigns!N2', '=IF(OR(B4="",UPPER(B4)="MISSING"),"Fix","OK")', 'Must be filled before outreach can be approved.'],
+    ['staging_creator_rows', '=MAX(COUNTA(\'HTML Staging\'!D:D)-1,0)', '=IF(B5=0,"Check","OK")', 'Rows available from the latest HTML export.'],
+    ['creator_rows', '=MAX(COUNTA(Creators!A:A)-1,0)', '=IF(B6=B5,"OK","Check")', 'Creators generated from HTML Staging.'],
+    ['email_ready_count', '=COUNTIF(Creators!E:E,"Email")', '=IF(B7>0,"OK","Check")', 'Creators with email contact method.'],
+    ['reddit_dm_count', '=COUNTIF(Creators!E:E,"Reddit DM")', '=IF(B8>0,"Info","OK")', 'Creators without email but with Reddit comment URL.'],
+    ['missing_contact_count', '=COUNTIF(Creators!E:E,"Missing")', '=IF(B9>0,"Review","OK")', 'Creators missing contact method.'],
+    ['needs_review_count', '=COUNTIFS(\'Review Queue\'!A:A,"<>",\'Review Queue\'!F:F,"")', '=IF(B10>0,"Review","OK")', 'Review rows still waiting for human decision.'],
+    ['approved_review_count', '=COUNTIFS(\'Review Queue\'!A:A,"<>",\'Review Queue\'!F:F,"Approved")', '=IF(B11>0,"OK","Info")', 'Creators approved by a human.'],
+    ['blocked_outreach_count', '=COUNTIFS(\'Outreach Queue\'!A:A,"<>",\'Outreach Queue\'!H:H,"Blocked")', '=IF(B12>0,"Info","OK")', 'Blocked because email or media room URL is missing.'],
+    ['needs_approval_count', '=COUNTIFS(\'Outreach Queue\'!A:A,"<>",\'Outreach Queue\'!H:H,"Needs Approval")', '=IF(B13>0,"Review","OK")', 'Email rows waiting for human approval.'],
+    ['approved_to_send_count', '=COUNTIFS(\'Outreach Queue\'!A:A,"<>",\'Outreach Queue\'!H:H,"Approved To Send")', '=IF(B14>0,"Ready","Info")', 'Drafts unlocked by human approval.'],
+    ['last_archive_run_id', '=IFERROR(LOOKUP(2,1/(\'Archive Index\'!A:A<>""),\'Archive Index\'!A:A),"None")', '=IF(B15="None","Info","OK")', 'Most recent archive snapshot ID.'],
+    ['last_populate_run_at', '=IFERROR(LOOKUP(2,1/(\'Agent Run Log\'!E:E="populate_from_html_staging"),\'Agent Run Log\'!C:C),"None")', '=IF(B16="None","Check","OK")', 'Most recent staging-to-MVP populate run.'],
+    ['agent_mode', '=IFERROR(INDEX(\'Agent Control\'!B:B,MATCH("agent_mode",\'Agent Control\'!A:A,0)),"Missing")', '=IF(B17="manual_approval_required","OK","Fix")', 'Hermes/agent must remain human approval gated.'],
+    ['auto_outreach_allowed', '=IFERROR(INDEX(\'Agent Control\'!B:B,MATCH("allow_auto_outreach",\'Agent Control\'!A:A,0)),"Missing")', '=IF(B18="No","OK","Fix")', 'Must stay No for MVP.']
+  ];
+
+  sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+  sheet.setFrozenRows(1);
+  sheet.getRange('A1:D1').setFontWeight('bold');
+  sheet.autoResizeColumns(1, 4);
 }
 
 function archiveSheetValues_(ss, sourceName, archiveName, metadata) {

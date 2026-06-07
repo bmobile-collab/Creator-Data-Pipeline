@@ -14,6 +14,7 @@ The Apps Script reads rows from a Google Sheets tab named `HTML Staging`, fetche
 - `Matches`
 - `Review Queue`
 - `Outreach Queue`
+- `MVP Control Center`
 - archive tabs for previous runs
 
 It does not send emails.
@@ -63,20 +64,47 @@ UGC Pipeline > Setup Agent-First MVP
 UGC Pipeline > Populate MVP From HTML Staging
 ```
 
-14. To test the portfolio enrichment POC, click:
+14. To refresh the dashboard, click:
+
+```text
+UGC Pipeline > Refresh MVP Control Center
+```
+
+15. To test the portfolio enrichment POC, click:
 
 ```text
 UGC Pipeline > Run first 10 enrichments
 ```
 
-15. Google will ask for permission the first time. Approve it.
-16. When the script finishes, check these tabs:
+16. Google will ask for permission the first time. Approve it.
+17. When the script finishes, check these tabs:
 
 ```text
 Portfolio Enrichment
 Outreach Drafts
 Run Log
 ```
+
+## MVP Control Center
+
+Use `MVP Control Center` as the first tab to inspect after setup, populate, archive/reset, or approval changes.
+
+It shows:
+
+- current round ID
+- active campaign ID
+- brand media room URL status
+- staging row count
+- creator row count
+- email-ready count
+- blocked outreach count
+- needs-approval count
+- approved-to-send count
+- last archive run ID
+- last populate run timestamp
+- agent safety controls
+
+Anything marked `Fix`, `Check`, or `Review` needs attention before outreach moves forward.
 
 ## Starting A New HTML Staging Run
 
@@ -120,8 +148,9 @@ Outreach Queue
 UGC Pipeline > Populate MVP From HTML Staging
 ```
 
-8. Review the new rows in `Review Queue`.
-9. Only rows marked `Approved` in `Review Queue` can move to `Approved To Send` in `Outreach Queue`.
+8. Check `MVP Control Center`.
+9. Review the new rows in `Review Queue`.
+10. Only rows marked `Approved` in `Review Queue` can move to `Approved To Send` in `Outreach Queue`.
 
 ## How To Use It Safely
 
