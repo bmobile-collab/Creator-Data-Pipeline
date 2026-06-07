@@ -52,9 +52,167 @@ const RUN_LOG_HEADERS = [
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('UGC Pipeline')
+    .addItem('Setup Agent-First MVP', 'setupAgentFirstMvp')
     .addItem('Run first 10 enrichments', 'runFirst10Enrichments')
     .addItem('Run next blank enrichments', 'runNextBlankEnrichments')
     .addToUi();
+}
+
+function setupAgentFirstMvp() {
+  const ss = SpreadsheetApp.getActive();
+  const now = new Date().toISOString();
+
+  const sheets = {
+    creators: ensureSheet_(ss, 'Creators', [
+      'creator_id', 'reddit_username', 'creator_name', 'email_primary', 'contact_method',
+      'portfolio_url', 'portfolio_url_type', 'social_links', 'source_platform', 'source_url',
+      'first_seen_round', 'last_seen_round', 'creator_status', 'confidence_score',
+      'review_status', 'notes'
+    ]),
+    evidence: ensureSheet_(ss, 'Evidence', [
+      'evidence_id', 'creator_id', 'field_name', 'claimed_value', 'evidence_text',
+      'evidence_source', 'evidence_url', 'confidence', 'verified_status', 'created_at'
+    ]),
+    campaigns: ensureSheet_(ss, 'Campaigns', [
+      'campaign_id', 'brand_name', 'campaign_name', 'product_category', 'required_tags',
+      'preferred_tags', 'excluded_tags', 'required_contact_method', 'portfolio_required',
+      'location_preference', 'must_be_verified', 'campaign_status', 'notes', 'brand_media_room_url'
+    ]),
+    matches: ensureSheet_(ss, 'Matches', [
+      'match_id', 'campaign_id', 'creator_id', 'match_score', 'match_tier',
+      'matched_reasons', 'missing_requirements', 'needs_review_reason', 'created_at'
+    ]),
+    review: ensureSheet_(ss, 'Review Queue', [
+      'review_id', 'creator_id', 'issue_type', 'issue_detail', 'recommended_action',
+      'human_decision', 'decision_notes', 'reviewed_at'
+    ]),
+    outreach: ensureSheet_(ss, 'Outreach Queue', [
+      'outreach_id', 'campaign_id', 'creator_id', 'email', 'template_id', 'outreach_subject',
+      'outreach_body', 'outreach_status', 'approved_by_human', 'sent_at', 'reply_status',
+      'conversion_status', 'notes'
+    ]),
+    templateLibrary: ensureSheet_(ss, 'Template Library', [
+      'template_id', 'template_name', 'template_subject', 'template_body', 'template_status', 'notes'
+    ]),
+    templatePerformance: ensureSheet_(ss, 'Template Performance', [
+      'template_id', 'sent_count', 'reply_count', 'positive_reply_count',
+      'booking_count', 'conversion_count', 'conversion_rate', 'notes'
+    ]),
+    runLog: ensureSheet_(ss, 'Run Log', [
+      'run_id', 'run_type', 'started_at', 'ended_at', 'status', 'rows_processed',
+      'ok_count', 'needs_review_count', 'error_count', 'notes'
+    ]),
+    agentRunLog: ensureSheet_(ss, 'Agent Run Log', [
+      'agent_run_id', 'agent_name', 'started_at', 'ended_at', 'step', 'action_taken',
+      'input_ref', 'output_ref', 'status', 'notes'
+    ]),
+    agentControl: ensureSheet_(ss, 'Agent Control', [
+      'control_key', 'control_value', 'description'
+    ])
+  };
+
+  seedAgentControl_(sheets.agentControl);
+  seedSafeTemplates_(sheets.templateLibrary);
+  seedTemplatePerformance_(sheets.templatePerformance);
+  applyAgentValidations_(sheets);
+  normalizeOutreachQueue_(sheets.outreach);
+  appendAgentRunLog_(sheets.agentRunLog, now);
+
+  SpreadsheetApp.getUi().alert('Agent-first MVP setup complete. Check Agent Control, dropdowns, and Outreach Queue.');
+}
+
+function seedAgentControl_(sheet) {
+  const rows = [
+    ['control_key', 'control_value', 'description'],
+    ['agent_mode', 'manual_approval_required', 'Hermes prepares work but cannot send outreach.'],
+    ['active_campaign_id', 'CAMP001', 'Campaign Hermes should operate on.'],
+    ['active_round_id', 'ROUND001', 'Current sourcing round.'],
+    ['max_batch_size', '10', 'Maximum creators Hermes can process per run.'],
+    ['allow_auto_outreach', 'No', 'Hard block on sending messages automatically.'],
+    ['allow_needs_review_outreach', 'No', 'Hard block on needs-review creators.'],
+    ['allowed_template_notes', 'Safe Auto', 'Only templates with this notes value can be used automatically.'],
+    ['required_media_room_url', 'Yes', 'Campaign must have media room URL before drafts can be approved.'],
+    ['human_final_approval_required', 'Yes', 'Human approval is required before outreach can move to Approved To Send.'],
+    ['sender_name', 'Baruch', 'Default sender name for safe templates.']
+  ];
+  sheet.clearContents();
+  sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+  sheet.setFrozenRows(1);
+}
+
+function seedSafeTemplates_(sheet) {
+  const existingRows = readSheetObjects_(sheet);
+  const existingIds = {};
+  existingRows.forEach(function (row) { existingIds[row.template_id] = true; });
+
+  const templates = [
+    ['T031', 'Paid UGC intro', 'Paid UGC collaboration', 'Hi {creator_greeting}, I am reaching out about a possible paid UGC collaboration for {brand_name}. Would you be open to hearing a little more? Best, {sender_name}', 'Active', 'Safe Auto'],
+    ['T032', 'Short collab check', 'Quick UGC question', 'Hi {creator_greeting}, are you currently open to paid UGC projects? We are looking for creators for {brand_name}. Best, {sender_name}', 'Active', 'Safe Auto'],
+    ['T033', 'Availability check', 'UGC project availability', 'Hi {creator_greeting}, I wanted to check if you are available for new UGC projects. We are putting together creator options for {brand_name}. Best, {sender_name}', 'Active', 'Safe Auto'],
+    ['T034', 'Brand intro', 'Creator opportunity', 'Hi {creator_greeting}, I am reaching out about {brand_name}. We are exploring UGC creator collaborations and wanted to see if you are open to hearing more. Best, {sender_name}', 'Active', 'Safe Auto']
+  ];
+
+  templates.forEach(function (template) {
+    if (!existingIds[template[0]]) sheet.appendRow(template);
+  });
+}
+
+function seedTemplatePerformance_(sheet) {
+  const rows = [
+    ['T031', '=COUNTIF(\'Outreach Queue\'!E:E,A2)', '=COUNTIFS(\'Outreach Queue\'!E:E,A2,\'Outreach Queue\'!K:K,"Replied")', '=COUNTIFS(\'Outreach Queue\'!E:E,A2,\'Outreach Queue\'!K:K,"Positive Reply")', '=COUNTIFS(\'Outreach Queue\'!E:E,A2,\'Outreach Queue\'!L:L,"Booked")', '=COUNTIFS(\'Outreach Queue\'!E:E,A2,\'Outreach Queue\'!L:L,"Converted")', '=IF(B2=0,0,F2/B2)', 'Safe Auto template'],
+    ['T032', '=COUNTIF(\'Outreach Queue\'!E:E,A3)', '=COUNTIFS(\'Outreach Queue\'!E:E,A3,\'Outreach Queue\'!K:K,"Replied")', '=COUNTIFS(\'Outreach Queue\'!E:E,A3,\'Outreach Queue\'!K:K,"Positive Reply")', '=COUNTIFS(\'Outreach Queue\'!E:E,A3,\'Outreach Queue\'!L:L,"Booked")', '=COUNTIFS(\'Outreach Queue\'!E:E,A3,\'Outreach Queue\'!L:L,"Converted")', '=IF(B3=0,0,F3/B3)', 'Safe Auto template'],
+    ['T033', '=COUNTIF(\'Outreach Queue\'!E:E,A4)', '=COUNTIFS(\'Outreach Queue\'!E:E,A4,\'Outreach Queue\'!K:K,"Replied")', '=COUNTIFS(\'Outreach Queue\'!E:E,A4,\'Outreach Queue\'!K:K,"Positive Reply")', '=COUNTIFS(\'Outreach Queue\'!E:E,A4,\'Outreach Queue\'!L:L,"Booked")', '=COUNTIFS(\'Outreach Queue\'!E:E,A4,\'Outreach Queue\'!L:L,"Converted")', '=IF(B4=0,0,F4/B4)', 'Safe Auto template'],
+    ['T034', '=COUNTIF(\'Outreach Queue\'!E:E,A5)', '=COUNTIFS(\'Outreach Queue\'!E:E,A5,\'Outreach Queue\'!K:K,"Replied")', '=COUNTIFS(\'Outreach Queue\'!E:E,A5,\'Outreach Queue\'!K:K,"Positive Reply")', '=COUNTIFS(\'Outreach Queue\'!E:E,A5,\'Outreach Queue\'!L:L,"Booked")', '=COUNTIFS(\'Outreach Queue\'!E:E,A5,\'Outreach Queue\'!L:L,"Converted")', '=IF(B5=0,0,F5/B5)', 'Safe Auto template']
+  ];
+  sheet.getRange(2, 1, rows.length, rows[0].length).setValues(rows);
+}
+
+function applyAgentValidations_(sheets) {
+  setDropdown_(sheets.creators, 'M2:M1000', ['New', 'Needs Review', 'Approved', 'Rejected', 'Contact Only', 'Duplicate']);
+  setDropdown_(sheets.creators, 'O2:O1000', ['New', 'Needs Review', 'Approved', 'Rejected']);
+  setDropdown_(sheets.campaigns, 'L2:L1000', ['Draft', 'Active', 'Paused', 'Complete', 'Archived']);
+  setDropdown_(sheets.matches, 'E2:E1000', ['Best Match', 'Maybe Match', 'Needs Review', 'Not Fit']);
+  setDropdown_(sheets.review, 'F2:F1000', ['Approved', 'Reject', 'Maybe', 'Needs More Info']);
+  setDropdown_(sheets.outreach, 'H2:H1000', ['Needs Approval', 'Approved To Send', 'Sent', 'Replied', 'Positive Reply', 'Not Interested', 'No Response', 'Blocked']);
+  setDropdown_(sheets.outreach, 'I2:I1000', ['FALSE', 'TRUE']);
+  setDropdown_(sheets.outreach, 'K2:K1000', ['Not Sent', 'Replied', 'Positive Reply', 'Not Interested', 'No Response']);
+  setDropdown_(sheets.outreach, 'L2:L1000', ['Not Started', 'Booked', 'Converted', 'Lost']);
+  setDropdown_(sheets.templateLibrary, 'E2:E1000', ['Active', 'Paused', 'Human Review', 'Archived']);
+  setDropdown_(sheets.agentControl, 'B2:B20', ['manual_approval_required', 'CAMP001', 'ROUND001', '10', 'No', 'Yes', 'Safe Auto', 'Baruch']);
+}
+
+function setDropdown_(sheet, rangeA1, values) {
+  const rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(values, true)
+    .setAllowInvalid(false)
+    .build();
+  sheet.getRange(rangeA1).setDataValidation(rule);
+}
+
+function normalizeOutreachQueue_(sheet) {
+  const maxRows = Math.min(sheet.getMaxRows(), 1000);
+  if (maxRows < 2) return;
+
+  sheet.getRange('E2:E' + maxRows).setFormulaR1C1('=IF(RC[-1]="","",CHOOSE(MOD(ROW()-2,4)+1,"T031","T032","T033","T034"))');
+  sheet.getRange('F2:F' + maxRows).setFormulaR1C1('=IF(RC[-1]="","",SUBSTITUTE(INDEX(\'Template Library\'!C:C,MATCH(RC[-1],\'Template Library\'!A:A,0)),"{brand_name}","this brand campaign"))');
+  sheet.getRange('G2:G' + maxRows).setFormulaR1C1('=IF(RC[-2]="","",SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(INDEX(\'Template Library\'!D:D,MATCH(RC[-2],\'Template Library\'!A:A,0)),"{creator_greeting}","there"),"{brand_name}","this brand campaign: "&Campaigns!R2C14),"{sender_name}",INDEX(\'Agent Control\'!B:B,MATCH("sender_name",\'Agent Control\'!A:A,0))))');
+  sheet.getRange('H2:H' + maxRows).setFormulaR1C1('=IF(RC[-4]="","","Needs Approval")');
+  sheet.getRange('I2:I' + maxRows).setValue('FALSE');
+}
+
+function appendAgentRunLog_(sheet, now) {
+  sheet.appendRow([
+    'AR' + Utilities.formatString('%03d', Math.max(1, sheet.getLastRow())),
+    'Hermes',
+    now,
+    now,
+    'agent_first_setup',
+    'Created Agent Control, validations, safe templates, and outreach guardrails',
+    'UGC Creator Pipeline POC - Round 1',
+    'Agent Control, dropdowns, Outreach Queue, Template Performance',
+    'Complete',
+    'Executed by Apps Script menu inside Google Sheets'
+  ]);
 }
 
 function runFirst10Enrichments() {
