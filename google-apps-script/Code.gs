@@ -566,18 +566,23 @@ function appendAgentRunLogEntry_(sheet, entry) {
 }
 
 function seedAgentControl_(sheet) {
+  const existingValues = {};
+  readSheetObjects_(sheet).forEach(function (row) {
+    if (row.control_key) existingValues[row.control_key] = row.control_value;
+  });
+
   const rows = [
     ['control_key', 'control_value', 'description'],
-    ['agent_mode', 'manual_approval_required', 'Hermes prepares work but cannot send outreach.'],
-    ['active_campaign_id', 'CAMP001', 'Campaign Hermes should operate on.'],
-    ['active_round_id', 'ROUND001', 'Current sourcing round.'],
-    ['max_batch_size', '10', 'Maximum creators Hermes can process per run.'],
-    ['allow_auto_outreach', 'No', 'Hard block on sending messages automatically.'],
-    ['allow_needs_review_outreach', 'No', 'Hard block on needs-review creators.'],
-    ['allowed_template_notes', 'Safe Auto', 'Only templates with this notes value can be used automatically.'],
-    ['required_media_room_url', 'Yes', 'Campaign must have media room URL before drafts can be approved.'],
-    ['human_final_approval_required', 'Yes', 'Human approval is required before outreach can move to Approved To Send.'],
-    ['sender_name', 'Baruch', 'Default sender name for safe templates.']
+    ['agent_mode', existingValues.agent_mode || 'manual_approval_required', 'Hermes prepares work but cannot send outreach.'],
+    ['active_campaign_id', existingValues.active_campaign_id || 'CAMP001', 'Campaign Hermes should operate on.'],
+    ['active_round_id', existingValues.active_round_id || 'ROUND001', 'Current sourcing round.'],
+    ['max_batch_size', existingValues.max_batch_size || '10', 'Maximum creators Hermes can process per run.'],
+    ['allow_auto_outreach', existingValues.allow_auto_outreach || 'No', 'Hard block on sending messages automatically.'],
+    ['allow_needs_review_outreach', existingValues.allow_needs_review_outreach || 'No', 'Hard block on needs-review creators.'],
+    ['allowed_template_notes', existingValues.allowed_template_notes || 'Safe Auto', 'Only templates with this notes value can be used automatically.'],
+    ['required_media_room_url', existingValues.required_media_room_url || 'Yes', 'Campaign must have media room URL before drafts can be approved.'],
+    ['human_final_approval_required', existingValues.human_final_approval_required || 'Yes', 'Human approval is required before outreach can move to Approved To Send.'],
+    ['sender_name', existingValues.sender_name || 'Baruch', 'Default sender name for safe templates.']
   ];
   sheet.clearContents();
   sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
