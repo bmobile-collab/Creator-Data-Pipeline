@@ -204,7 +204,7 @@ function normalizeOutreachQueue_(sheet) {
     templateFormulas.push([`=IF(D${row}="","",CHOOSE(MOD(ROW()-2,4)+1,"T031","T032","T033","T034"))`]);
     subjectFormulas.push([`=IF(E${row}="","",SUBSTITUTE(INDEX('Template Library'!C:C,MATCH(E${row},'Template Library'!A:A,0)),"{brand_name}","this brand campaign"))`]);
     bodyFormulas.push([`=IF(E${row}="","",SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(INDEX('Template Library'!D:D,MATCH(E${row},'Template Library'!A:A,0)),"{creator_greeting}","there"),"{brand_name}","this brand campaign: "&Campaigns!N$2),"{sender_name}",INDEX('Agent Control'!B:B,MATCH("sender_name",'Agent Control'!A:A,0))))`]);
-    statusFormulas.push([`=IF(D${row}="","","Needs Approval")`]);
+    statusFormulas.push([`=IF(D${row}="","Blocked",IF(OR(Campaigns!N$2="",UPPER(Campaigns!N$2)="MISSING"),"Blocked","Needs Approval"))`]);
     approvalValues.push(['FALSE']);
   }
 
