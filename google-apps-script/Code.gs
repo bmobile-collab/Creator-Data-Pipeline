@@ -423,8 +423,8 @@ function refreshMvpControlCenter_(ss) {
     ['blocked_outreach_count', '=COUNTIFS(\'Outreach Queue\'!A:A,"<>",\'Outreach Queue\'!H:H,"Blocked")', '=IF(B12>0,"Info","OK")', 'Blocked because email or media room URL is missing.'],
     ['needs_approval_count', '=COUNTIFS(\'Outreach Queue\'!A:A,"<>",\'Outreach Queue\'!H:H,"Needs Approval")', '=IF(B13>0,"Review","OK")', 'Email rows waiting for human approval.'],
     ['approved_to_send_count', '=COUNTIFS(\'Outreach Queue\'!A:A,"<>",\'Outreach Queue\'!H:H,"Approved To Send")', '=IF(B14>0,"Ready","Info")', 'Drafts unlocked by human approval.'],
-    ['last_archive_run_id', '=IFERROR(LOOKUP(2,1/(\'Archive Index\'!A:A<>""),\'Archive Index\'!A:A),"None")', '=IF(B15="None","Info","OK")', 'Most recent archive snapshot ID.'],
-    ['last_populate_run_at', '=IFERROR(LOOKUP(2,1/(\'Agent Run Log\'!E:E="populate_from_html_staging"),\'Agent Run Log\'!C:C),"None")', '=IF(B16="None","Check","OK")', 'Most recent staging-to-MVP populate run.'],
+    ['last_archive_run_id', '=IFERROR(INDEX(\'Archive Index\'!A:A,MAX(FILTER(ROW(\'Archive Index\'!A:A),\'Archive Index\'!A:A<>"",\'Archive Index\'!A:A<>"archive_run_id"))),"None")', '=IF(B15="None","Info","OK")', 'Most recent archive snapshot ID.'],
+    ['last_populate_run_at', '=IFERROR(INDEX(\'Agent Run Log\'!C:C,MAX(FILTER(ROW(\'Agent Run Log\'!E:E),\'Agent Run Log\'!E:E="populate_from_html_staging"))),"None")', '=IF(B16="None","Check","OK")', 'Most recent staging-to-MVP populate run.'],
     ['agent_mode', '=IFERROR(INDEX(\'Agent Control\'!B:B,MATCH("agent_mode",\'Agent Control\'!A:A,0)),"Missing")', '=IF(B17="manual_approval_required","OK","Fix")', 'Hermes/agent must remain human approval gated.'],
     ['auto_outreach_allowed', '=IFERROR(INDEX(\'Agent Control\'!B:B,MATCH("allow_auto_outreach",\'Agent Control\'!A:A,0)),"Missing")', '=IF(B18="No","OK","Fix")', 'Must stay No for MVP.']
   ];
@@ -443,13 +443,22 @@ function archiveSheetValues_(ss, sourceName, archiveName, metadata) {
   }
 
   const sourceHeaders = source.getRange(1, 1, 1, source.getLastColumn()).getValues()[0];
-  const sourceValues = source.getRange(2, 1, source.getLastRow() - 1, source.getLastColumn()).getValues();
+  const sourceValues = source.getRange(2, 1, source.getLastRow() - 1, source.getLastColumn()).getValues()
+    .filter(function (row) { return rowHasArchiveData_(sourceName, row); });
   const archive = ensureArchiveSheet_(ss, archiveName, sourceHeaders);
+  if (!sourceValues.length) return 0;
   const rows = sourceValues.map(function (row) {
     return metadata.concat([sourceName]).concat(row);
   });
   archive.getRange(archive.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
   return rows.length;
+}
+
+function rowHasArchiveData_(sourceName, row) {
+  if (sourceName === STAGING_SHEET) {
+    return row.some(function (value) { return String(value || '').trim() !== ''; });
+  }
+  return String(row[0] || '').trim() !== '';
 }
 
 function ensureArchiveSheet_(ss, archiveName, sourceHeaders) {
