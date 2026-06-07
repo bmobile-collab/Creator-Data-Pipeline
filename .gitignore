@@ -1,0 +1,13 @@
+# Runtime data and creator records stay local or in Google Drive.
+data/
+outputs/
+runs/
+
+# Local spreadsheets or exports.
+*.xlsx
+*.xls
+*.ods
+
+# OS/editor noise.
+.DS_Store
+Thumbs.db

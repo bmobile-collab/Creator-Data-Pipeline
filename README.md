@@ -6,18 +6,29 @@ Lightweight POC for turning Reddit UGC creator comments into a clean staging CSV
 
 - `index.html` - browser-based Reddit UGC extractor, ready for GitHub Pages.
 - `scripts/enrich_ugc_poc.mjs` - local enrichment script for staging CSV files.
+- `scripts/init_round_storage.mjs` - creates private local folders for each sourcing round.
 - `google-apps-script/Code.gs` - Google Sheets menu runner for enrichment.
 - `samples/sample_ugc_staging_export.csv` - tiny sample input for testing.
 - `docs/POC_README.md` - guided workflow for export, enrichment, and Google Sheets import.
 - `docs/GOOGLE_SHEETS_APPS_SCRIPT.md` - click-by-click setup for the Sheets runner.
+- `docs/STORAGE_ORGANIZATION.md` - scalable folder and file storage rules.
 
 ## Quick Start
 
-1. Open `index.html` in a browser, or use the GitHub Pages URL after Pages is enabled.
-2. Paste a Reddit post URL.
-3. Open Reddit JSON pages, save them as `.txt` or `.json`, and drop them into the app.
-4. Click **Export Staging CSV**.
-5. Import the downloaded CSV into Google Sheets as `HTML Staging`.
+1. Create a private round folder:
+
+```powershell
+node scripts/init_round_storage.mjs --round 1 --slug reddit_ugc_paid
+```
+
+2. Open `index.html` in a browser, or use the GitHub Pages URL after Pages is enabled.
+3. Paste a Reddit post URL.
+4. Open Reddit JSON pages, save them as `.txt` or `.json`, and drop them into the app.
+5. Click **Export Staging CSV**.
+6. Save the downloaded CSV into the round folder's `staging/` folder.
+7. Import the staging CSV into Google Sheets as `HTML Staging`.
+
+Full storage guide: `docs/STORAGE_ORGANIZATION.md`
 
 ## Run Enrichment Locally
 
