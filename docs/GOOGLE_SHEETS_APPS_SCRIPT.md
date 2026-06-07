@@ -4,11 +4,17 @@ This is the easiest POC path once you have exported `ugc_staging_export_YYYY-MM-
 
 ## What It Does
 
-The Apps Script reads rows from a Google Sheets tab named `HTML Staging`, fetches each usable portfolio URL, and writes three new tabs:
+The Apps Script reads rows from a Google Sheets tab named `HTML Staging`, fetches each usable portfolio URL, and supports the agent-first MVP workflow:
 
 - `Portfolio Enrichment`
 - `Outreach Drafts`
 - `Run Log`
+- `Creators`
+- `Evidence`
+- `Matches`
+- `Review Queue`
+- `Outreach Queue`
+- archive tabs for previous runs
 
 It does not send emails.
 
@@ -45,20 +51,77 @@ google-apps-script/Code.gs
 UGC Pipeline
 ```
 
-12. Click:
+12. For the first setup, click:
+
+```text
+UGC Pipeline > Setup Agent-First MVP
+```
+
+13. To build the MVP tabs from your imported CSV, click:
+
+```text
+UGC Pipeline > Populate MVP From HTML Staging
+```
+
+14. To test the portfolio enrichment POC, click:
 
 ```text
 UGC Pipeline > Run first 10 enrichments
 ```
 
-13. Google will ask for permission the first time. Approve it.
-14. When the script finishes, check these tabs:
+15. Google will ask for permission the first time. Approve it.
+16. When the script finishes, check these tabs:
 
 ```text
 Portfolio Enrichment
 Outreach Drafts
 Run Log
 ```
+
+## Starting A New HTML Staging Run
+
+Use this before importing a fresh staging CSV.
+
+1. Finish reviewing the current run.
+2. Click:
+
+```text
+UGC Pipeline > Archive Current Run + Reset For New Staging
+```
+
+3. Confirm the warning.
+4. The script copies the old run into:
+
+```text
+Archive Index
+Archive - HTML Staging
+Archive - Creators
+Archive - Evidence
+Archive - Matches
+Archive - Review Queue
+Archive - Outreach Queue
+```
+
+5. The script clears only the active working tabs:
+
+```text
+HTML Staging
+Creators
+Evidence
+Matches
+Review Queue
+Outreach Queue
+```
+
+6. Import the new CSV into `HTML Staging`.
+7. Click:
+
+```text
+UGC Pipeline > Populate MVP From HTML Staging
+```
+
+8. Review the new rows in `Review Queue`.
+9. Only rows marked `Approved` in `Review Queue` can move to `Approved To Send` in `Outreach Queue`.
 
 ## How To Use It Safely
 
@@ -69,6 +132,8 @@ UGC Pipeline > Run next blank enrichments
 ```
 
 That option skips Reddit usernames already present in `Portfolio Enrichment`.
+
+For the agent-first MVP tabs, use `Populate MVP From HTML Staging` after each fresh CSV import. Outreach rows are blocked unless they have an email, a campaign media room URL, and human approval.
 
 ## Expected Limitations
 

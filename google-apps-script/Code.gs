@@ -3,6 +3,95 @@ const ENRICHMENT_SHEET = 'Portfolio Enrichment';
 const OUTREACH_SHEET = 'Outreach Drafts';
 const RUN_LOG_SHEET = 'Run Log';
 const DEFAULT_LIMIT = 10;
+const ARCHIVE_METADATA_HEADERS = ['archive_run_id', 'archived_at', 'round_id', 'campaign_id', 'source_sheet'];
+
+const STAGING_HEADERS = [
+  'source_platform',
+  'source_post_url',
+  'source_post_title',
+  'reddit_username',
+  'email',
+  'portfolio_url',
+  'portfolio_url_type',
+  'all_urls',
+  'all_emails',
+  'comment_snippet',
+  'upvotes_max',
+  'date_posted',
+  'reddit_comment_url',
+  'has_canva',
+  'needs_contact_method',
+  'ingest_status',
+  'ingest_notes'
+];
+
+const CREATORS_HEADERS = [
+  'creator_id', 'reddit_username', 'creator_name', 'email_primary', 'contact_method',
+  'portfolio_url', 'portfolio_url_type', 'social_links', 'source_platform', 'source_url',
+  'first_seen_round', 'last_seen_round', 'creator_status', 'confidence_score',
+  'review_status', 'notes'
+];
+
+const EVIDENCE_HEADERS = [
+  'evidence_id', 'creator_id', 'field_name', 'claimed_value', 'evidence_text',
+  'evidence_source', 'evidence_url', 'confidence', 'verified_status', 'created_at'
+];
+
+const CAMPAIGNS_HEADERS = [
+  'campaign_id', 'brand_name', 'campaign_name', 'product_category', 'required_tags',
+  'preferred_tags', 'excluded_tags', 'required_contact_method', 'portfolio_required',
+  'location_preference', 'must_be_verified', 'campaign_status', 'notes', 'brand_media_room_url'
+];
+
+const MATCHES_HEADERS = [
+  'match_id', 'campaign_id', 'creator_id', 'match_score', 'match_tier',
+  'matched_reasons', 'missing_requirements', 'needs_review_reason', 'created_at'
+];
+
+const REVIEW_HEADERS = [
+  'review_id', 'creator_id', 'issue_type', 'issue_detail', 'recommended_action',
+  'human_decision', 'decision_notes', 'reviewed_at'
+];
+
+const OUTREACH_QUEUE_HEADERS = [
+  'outreach_id', 'campaign_id', 'creator_id', 'email', 'template_id', 'outreach_subject',
+  'outreach_body', 'outreach_status', 'approved_by_human', 'sent_at', 'reply_status',
+  'conversion_status', 'notes'
+];
+
+const TEMPLATE_LIBRARY_HEADERS = [
+  'template_id', 'template_name', 'template_subject', 'template_body', 'template_status', 'notes'
+];
+
+const TEMPLATE_PERFORMANCE_HEADERS = [
+  'template_id', 'sent_count', 'reply_count', 'positive_reply_count',
+  'booking_count', 'conversion_count', 'conversion_rate', 'notes'
+];
+
+const AGENT_RUN_LOG_HEADERS = [
+  'agent_run_id', 'agent_name', 'started_at', 'ended_at', 'step', 'action_taken',
+  'input_ref', 'output_ref', 'status', 'notes'
+];
+
+const AGENT_CONTROL_HEADERS = ['control_key', 'control_value', 'description'];
+
+const ARCHIVE_SHEET_MAP = [
+  { source: STAGING_SHEET, archive: 'Archive - HTML Staging' },
+  { source: 'Creators', archive: 'Archive - Creators' },
+  { source: 'Evidence', archive: 'Archive - Evidence' },
+  { source: 'Matches', archive: 'Archive - Matches' },
+  { source: 'Review Queue', archive: 'Archive - Review Queue' },
+  { source: 'Outreach Queue', archive: 'Archive - Outreach Queue' }
+];
+
+const RESET_ACTIVE_SHEETS = [
+  { name: STAGING_SHEET, headers: STAGING_HEADERS },
+  { name: 'Creators', headers: CREATORS_HEADERS },
+  { name: 'Evidence', headers: EVIDENCE_HEADERS },
+  { name: 'Matches', headers: MATCHES_HEADERS },
+  { name: 'Review Queue', headers: REVIEW_HEADERS },
+  { name: 'Outreach Queue', headers: OUTREACH_QUEUE_HEADERS }
+];
 
 const ENRICHMENT_HEADERS = [
   'reddit_username',
@@ -53,6 +142,10 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('UGC Pipeline')
     .addItem('Setup Agent-First MVP', 'setupAgentFirstMvp')
+    .addSeparator()
+    .addItem('Archive Current Run + Reset For New Staging', 'archiveCurrentRunAndResetForNewStaging')
+    .addItem('Populate MVP From HTML Staging', 'populateMvpFromHtmlStaging')
+    .addSeparator()
     .addItem('Run first 10 enrichments', 'runFirst10Enrichments')
     .addItem('Run next blank enrichments', 'runNextBlankEnrichments')
     .addToUi();
@@ -63,52 +156,20 @@ function setupAgentFirstMvp() {
   const now = new Date().toISOString();
 
   const sheets = {
-    creators: ensureSheet_(ss, 'Creators', [
-      'creator_id', 'reddit_username', 'creator_name', 'email_primary', 'contact_method',
-      'portfolio_url', 'portfolio_url_type', 'social_links', 'source_platform', 'source_url',
-      'first_seen_round', 'last_seen_round', 'creator_status', 'confidence_score',
-      'review_status', 'notes'
-    ]),
-    evidence: ensureSheet_(ss, 'Evidence', [
-      'evidence_id', 'creator_id', 'field_name', 'claimed_value', 'evidence_text',
-      'evidence_source', 'evidence_url', 'confidence', 'verified_status', 'created_at'
-    ]),
-    campaigns: ensureSheet_(ss, 'Campaigns', [
-      'campaign_id', 'brand_name', 'campaign_name', 'product_category', 'required_tags',
-      'preferred_tags', 'excluded_tags', 'required_contact_method', 'portfolio_required',
-      'location_preference', 'must_be_verified', 'campaign_status', 'notes', 'brand_media_room_url'
-    ]),
-    matches: ensureSheet_(ss, 'Matches', [
-      'match_id', 'campaign_id', 'creator_id', 'match_score', 'match_tier',
-      'matched_reasons', 'missing_requirements', 'needs_review_reason', 'created_at'
-    ]),
-    review: ensureSheet_(ss, 'Review Queue', [
-      'review_id', 'creator_id', 'issue_type', 'issue_detail', 'recommended_action',
-      'human_decision', 'decision_notes', 'reviewed_at'
-    ]),
-    outreach: ensureSheet_(ss, 'Outreach Queue', [
-      'outreach_id', 'campaign_id', 'creator_id', 'email', 'template_id', 'outreach_subject',
-      'outreach_body', 'outreach_status', 'approved_by_human', 'sent_at', 'reply_status',
-      'conversion_status', 'notes'
-    ]),
-    templateLibrary: ensureSheet_(ss, 'Template Library', [
-      'template_id', 'template_name', 'template_subject', 'template_body', 'template_status', 'notes'
-    ]),
-    templatePerformance: ensureSheet_(ss, 'Template Performance', [
-      'template_id', 'sent_count', 'reply_count', 'positive_reply_count',
-      'booking_count', 'conversion_count', 'conversion_rate', 'notes'
-    ]),
+    creators: ensureSheet_(ss, 'Creators', CREATORS_HEADERS),
+    evidence: ensureSheet_(ss, 'Evidence', EVIDENCE_HEADERS),
+    campaigns: ensureSheet_(ss, 'Campaigns', CAMPAIGNS_HEADERS),
+    matches: ensureSheet_(ss, 'Matches', MATCHES_HEADERS),
+    review: ensureSheet_(ss, 'Review Queue', REVIEW_HEADERS),
+    outreach: ensureSheet_(ss, 'Outreach Queue', OUTREACH_QUEUE_HEADERS),
+    templateLibrary: ensureSheet_(ss, 'Template Library', TEMPLATE_LIBRARY_HEADERS),
+    templatePerformance: ensureSheet_(ss, 'Template Performance', TEMPLATE_PERFORMANCE_HEADERS),
     runLog: ensureSheet_(ss, 'Run Log', [
       'run_id', 'run_type', 'started_at', 'ended_at', 'status', 'rows_processed',
       'ok_count', 'needs_review_count', 'error_count', 'notes'
     ]),
-    agentRunLog: ensureSheet_(ss, 'Agent Run Log', [
-      'agent_run_id', 'agent_name', 'started_at', 'ended_at', 'step', 'action_taken',
-      'input_ref', 'output_ref', 'status', 'notes'
-    ]),
-    agentControl: ensureSheet_(ss, 'Agent Control', [
-      'control_key', 'control_value', 'description'
-    ])
+    agentRunLog: ensureSheet_(ss, 'Agent Run Log', AGENT_RUN_LOG_HEADERS),
+    agentControl: ensureSheet_(ss, 'Agent Control', AGENT_CONTROL_HEADERS)
   };
 
   seedAgentControl_(sheets.agentControl);
@@ -119,6 +180,389 @@ function setupAgentFirstMvp() {
   appendAgentRunLog_(sheets.agentRunLog, now);
 
   SpreadsheetApp.getUi().alert('Agent-first MVP setup complete. Check Agent Control, dropdowns, and Outreach Queue.');
+}
+
+function archiveCurrentRunAndResetForNewStaging() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.alert(
+    'Archive and reset?',
+    'This will copy the current run into Archive tabs, then clear HTML Staging, Creators, Evidence, Matches, Review Queue, and Outreach Queue. No emails will be sent.',
+    ui.ButtonSet.YES_NO
+  );
+  if (response !== ui.Button.YES) return;
+
+  const ss = SpreadsheetApp.getActive();
+  const now = new Date().toISOString();
+  const agentControl = ensureSheet_(ss, 'Agent Control', AGENT_CONTROL_HEADERS);
+  const agentRunLog = ensureSheet_(ss, 'Agent Run Log', AGENT_RUN_LOG_HEADERS);
+  const roundId = getControlValue_(agentControl, 'active_round_id') || 'ROUND001';
+  const campaignId = getControlValue_(agentControl, 'active_campaign_id') || 'CAMP001';
+  const archiveRunId = buildArchiveRunId_(now);
+  const metadata = [archiveRunId, now, roundId, campaignId];
+  const archiveCounts = {};
+
+  ARCHIVE_SHEET_MAP.forEach(function (item) {
+    archiveCounts[item.source] = archiveSheetValues_(ss, item.source, item.archive, metadata);
+  });
+
+  appendArchiveIndex_(ss, {
+    archive_run_id: archiveRunId,
+    archived_at: now,
+    round_id: roundId,
+    campaign_id: campaignId,
+    html_rows: archiveCounts[STAGING_SHEET] || 0,
+    creator_rows: archiveCounts.Creators || 0,
+    evidence_rows: archiveCounts.Evidence || 0,
+    match_rows: archiveCounts.Matches || 0,
+    review_rows: archiveCounts['Review Queue'] || 0,
+    outreach_rows: archiveCounts['Outreach Queue'] || 0,
+    notes: 'Archived active run before clearing working tabs'
+  });
+
+  RESET_ACTIVE_SHEETS.forEach(function (item) {
+    const sheet = ensureSheet_(ss, item.name, item.headers || getExistingHeaders_(ss, item.name));
+    clearDataRows_(sheet);
+  });
+
+  setControlValue_(agentControl, 'active_round_id', nextRoundId_(roundId));
+  appendAgentRunLogEntry_(agentRunLog, {
+    step: 'archive_reset',
+    action_taken: 'Archived active run and cleared working tabs for new HTML Staging',
+    input_ref: roundId + ' / ' + campaignId,
+    output_ref: archiveRunId,
+    status: 'Complete',
+    notes: 'Next active_round_id set to ' + nextRoundId_(roundId)
+  });
+
+  ui.alert('Archive/reset complete. Archive run: ' + archiveRunId + '. Import your next CSV into HTML Staging, then run Populate MVP From HTML Staging.');
+}
+
+function populateMvpFromHtmlStaging() {
+  const ss = SpreadsheetApp.getActive();
+  const ui = SpreadsheetApp.getUi();
+  const now = new Date().toISOString();
+  const staging = ss.getSheetByName(STAGING_SHEET);
+  if (!staging) {
+    ui.alert('Missing tab: ' + STAGING_SHEET);
+    return;
+  }
+
+  const stagingRows = readSheetObjects_(staging).filter(function (row) {
+    return normalizeUsername_(row.reddit_username) || row.email || row.portfolio_url || row.reddit_comment_url;
+  });
+  if (!stagingRows.length) {
+    ui.alert('HTML Staging has no creator rows to populate.');
+    return;
+  }
+
+  const sheets = {
+    creators: ensureSheet_(ss, 'Creators', CREATORS_HEADERS),
+    evidence: ensureSheet_(ss, 'Evidence', EVIDENCE_HEADERS),
+    campaigns: ensureSheet_(ss, 'Campaigns', CAMPAIGNS_HEADERS),
+    matches: ensureSheet_(ss, 'Matches', MATCHES_HEADERS),
+    review: ensureSheet_(ss, 'Review Queue', REVIEW_HEADERS),
+    outreach: ensureSheet_(ss, 'Outreach Queue', OUTREACH_QUEUE_HEADERS),
+    templateLibrary: ensureSheet_(ss, 'Template Library', TEMPLATE_LIBRARY_HEADERS),
+    templatePerformance: ensureSheet_(ss, 'Template Performance', TEMPLATE_PERFORMANCE_HEADERS),
+    agentControl: ensureSheet_(ss, 'Agent Control', AGENT_CONTROL_HEADERS),
+    agentRunLog: ensureSheet_(ss, 'Agent Run Log', AGENT_RUN_LOG_HEADERS)
+  };
+
+  seedSafeTemplates_(sheets.templateLibrary);
+  seedTemplatePerformance_(sheets.templatePerformance);
+  applyAgentValidations_(sheets);
+
+  clearDataRows_(sheets.creators);
+  clearDataRows_(sheets.evidence);
+  clearDataRows_(sheets.matches);
+  clearDataRows_(sheets.review);
+  clearDataRows_(sheets.outreach);
+
+  const roundId = getControlValue_(sheets.agentControl, 'active_round_id') || 'ROUND001';
+  const campaignId = getControlValue_(sheets.agentControl, 'active_campaign_id') || 'CAMP001';
+  const creatorRows = [];
+  const evidenceRows = [];
+  const matchRows = [];
+  const reviewRows = [];
+  const outreachRows = [];
+  let evidenceCounter = 1;
+
+  stagingRows.forEach(function (row, index) {
+    const creatorId = 'CR' + Utilities.formatString('%03d', index + 1);
+    const username = normalizeUsername_(row.reddit_username);
+    const email = row.email || firstValue_(row.all_emails);
+    const portfolioUrl = cleanUrl_(row.portfolio_url);
+    const allUrls = row.all_urls || '';
+    const contactMethod = email ? 'Email' : (row.reddit_comment_url ? 'Reddit DM' : 'Missing');
+    const sourceUrl = row.reddit_comment_url || row.source_post_url || '';
+    const confidence = scoreStagingConfidence_(row, email, portfolioUrl);
+    const creatorStatus = email || row.reddit_comment_url ? 'New' : 'Needs Review';
+    const reviewStatus = confidence >= 50 ? 'New' : 'Needs Review';
+    const notes = compactJoin_([row.ingest_status, row.ingest_notes], ' | ');
+
+    creatorRows.push([
+      creatorId,
+      username,
+      '',
+      email,
+      contactMethod,
+      portfolioUrl,
+      row.portfolio_url_type || classifyUrl_(portfolioUrl),
+      extractSocialUrlsFromText_(allUrls).join(' | '),
+      row.source_platform || 'reddit',
+      sourceUrl,
+      roundId,
+      roundId,
+      creatorStatus,
+      confidence,
+      reviewStatus,
+      notes
+    ]);
+
+    if (email) {
+      evidenceRows.push(buildEvidenceRow_(evidenceCounter++, creatorId, 'email_primary', email, row.comment_snippet, 'reddit_comment', sourceUrl, 80, now));
+    }
+    if (portfolioUrl) {
+      evidenceRows.push(buildEvidenceRow_(evidenceCounter++, creatorId, 'portfolio_url', portfolioUrl, row.comment_snippet, 'reddit_comment', sourceUrl, 70, now));
+    }
+    if (row.comment_snippet) {
+      evidenceRows.push(buildEvidenceRow_(evidenceCounter++, creatorId, 'reddit_comment_snippet', row.comment_snippet, row.comment_snippet, 'reddit_comment', sourceUrl, 50, now));
+    }
+    if (allUrls) {
+      evidenceRows.push(buildEvidenceRow_(evidenceCounter++, creatorId, 'all_urls', allUrls, row.comment_snippet, 'reddit_comment', sourceUrl, 45, now));
+    }
+
+    const match = buildMatchAssessment_(row, email, portfolioUrl);
+    matchRows.push([
+      'M' + Utilities.formatString('%03d', index + 1),
+      campaignId,
+      creatorId,
+      match.score,
+      match.tier,
+      match.reasons,
+      match.missing,
+      match.reviewReason,
+      now
+    ]);
+
+    reviewRows.push([
+      'R' + Utilities.formatString('%03d', index + 1),
+      creatorId,
+      match.reviewReason ? 'Needs Review' : 'Standard Approval',
+      match.reviewReason || 'Ready for human approval check',
+      match.reviewReason ? 'Review before outreach' : 'Approve if campaign fit looks good',
+      '',
+      '',
+      ''
+    ]);
+
+    outreachRows.push([
+      'O' + Utilities.formatString('%03d', index + 1),
+      campaignId,
+      creatorId,
+      email,
+      '',
+      '',
+      '',
+      '',
+      '',
+      '',
+      'Not Sent',
+      'Not Started',
+      email ? 'Awaiting human approval gate' : 'Blocked because no email is available'
+    ]);
+  });
+
+  if (creatorRows.length) sheets.creators.getRange(2, 1, creatorRows.length, creatorRows[0].length).setValues(creatorRows);
+  if (evidenceRows.length) sheets.evidence.getRange(2, 1, evidenceRows.length, evidenceRows[0].length).setValues(evidenceRows);
+  if (matchRows.length) sheets.matches.getRange(2, 1, matchRows.length, matchRows[0].length).setValues(matchRows);
+  if (reviewRows.length) sheets.review.getRange(2, 1, reviewRows.length, reviewRows[0].length).setValues(reviewRows);
+  if (outreachRows.length) sheets.outreach.getRange(2, 1, outreachRows.length, outreachRows[0].length).setValues(outreachRows);
+
+  normalizeOutreachQueue_(sheets.outreach);
+  appendAgentRunLogEntry_(sheets.agentRunLog, {
+    step: 'populate_from_html_staging',
+    action_taken: 'Rebuilt MVP tabs from HTML Staging',
+    input_ref: STAGING_SHEET,
+    output_ref: 'Creators, Evidence, Matches, Review Queue, Outreach Queue',
+    status: 'Complete',
+    notes: 'Rows populated: ' + stagingRows.length
+  });
+
+  ui.alert('MVP tabs populated from HTML Staging. Creator rows: ' + stagingRows.length + '. Review Queue approvals now control Outreach Queue.');
+}
+
+function archiveSheetValues_(ss, sourceName, archiveName, metadata) {
+  const source = ss.getSheetByName(sourceName);
+  if (!source || source.getLastRow() < 2) {
+    ensureArchiveSheet_(ss, archiveName, getExistingHeaders_(ss, sourceName));
+    return 0;
+  }
+
+  const sourceHeaders = source.getRange(1, 1, 1, source.getLastColumn()).getValues()[0];
+  const sourceValues = source.getRange(2, 1, source.getLastRow() - 1, source.getLastColumn()).getValues();
+  const archive = ensureArchiveSheet_(ss, archiveName, sourceHeaders);
+  const rows = sourceValues.map(function (row) {
+    return metadata.concat([sourceName]).concat(row);
+  });
+  archive.getRange(archive.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+  return rows.length;
+}
+
+function ensureArchiveSheet_(ss, archiveName, sourceHeaders) {
+  const headers = ARCHIVE_METADATA_HEADERS.concat(sourceHeaders || []);
+  return ensureSheet_(ss, archiveName, headers);
+}
+
+function appendArchiveIndex_(ss, row) {
+  const headers = [
+    'archive_run_id', 'archived_at', 'round_id', 'campaign_id', 'html_rows',
+    'creator_rows', 'evidence_rows', 'match_rows', 'review_rows', 'outreach_rows', 'notes'
+  ];
+  const sheet = ensureSheet_(ss, 'Archive Index', headers);
+  appendObjectRow_(sheet, headers, row);
+}
+
+function clearDataRows_(sheet) {
+  const lastRow = sheet.getLastRow();
+  const lastColumn = Math.max(1, sheet.getLastColumn());
+  if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, lastColumn).clearContent();
+}
+
+function getExistingHeaders_(ss, sheetName) {
+  const sheet = ss.getSheetByName(sheetName);
+  if (!sheet || sheet.getLastRow() === 0 || sheet.getLastColumn() === 0) return [];
+  return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+}
+
+function buildArchiveRunId_(isoDate) {
+  return 'RUN_' + String(isoDate || new Date().toISOString())
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}Z$/, 'Z')
+    .replace('T', '_');
+}
+
+function getControlValue_(sheet, key) {
+  const rows = readSheetObjects_(sheet);
+  for (const row of rows) {
+    if (String(row.control_key || '').trim() === key) return String(row.control_value || '').trim();
+  }
+  return '';
+}
+
+function setControlValue_(sheet, key, value) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    sheet.appendRow([key, value, '']);
+    return;
+  }
+
+  const keys = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (let index = 0; index < keys.length; index += 1) {
+    if (String(keys[index][0] || '').trim() === key) {
+      sheet.getRange(index + 2, 2).setValue(value);
+      return;
+    }
+  }
+  sheet.appendRow([key, value, '']);
+}
+
+function nextRoundId_(roundId) {
+  const match = String(roundId || '').match(/^(.*?)(\d+)$/);
+  if (!match) return String(roundId || 'ROUND') + '_NEXT';
+  const prefix = match[1];
+  const numberText = match[2];
+  const nextNumber = String(Number(numberText) + 1).padStart(numberText.length, '0');
+  return prefix + nextNumber;
+}
+
+function buildEvidenceRow_(counter, creatorId, fieldName, claimedValue, evidenceText, source, url, confidence, createdAt) {
+  return [
+    'EV' + Utilities.formatString('%03d', counter),
+    creatorId,
+    fieldName,
+    claimedValue || '',
+    evidenceText || '',
+    source || '',
+    url || '',
+    confidence || '',
+    'source_captured',
+    createdAt
+  ];
+}
+
+function scoreStagingConfidence_(row, email, portfolioUrl) {
+  let score = 10;
+  if (email) score += 30;
+  if (portfolioUrl) score += 25;
+  if (row.reddit_comment_url) score += 10;
+  if (row.comment_snippet) score += 10;
+  if (/canva|personal_site/i.test(String(row.portfolio_url_type || classifyUrl_(portfolioUrl)))) score += 10;
+  return Math.max(0, Math.min(100, score));
+}
+
+function buildMatchAssessment_(row, email, portfolioUrl) {
+  const reasons = [];
+  const missing = [];
+  const reviewReasons = [];
+  let score = 20;
+
+  if (email) {
+    score += 35;
+    reasons.push('email_available');
+  } else {
+    missing.push('email');
+  }
+
+  if (portfolioUrl) {
+    score += 25;
+    reasons.push('portfolio_available');
+  } else {
+    missing.push('portfolio');
+    reviewReasons.push('No portfolio URL in staging');
+  }
+
+  if (row.reddit_comment_url) reasons.push('reddit_comment_source');
+  if (row.portfolio_url_type === 'canva_design') reviewReasons.push('Canva design may need manual review');
+  if (row.ingest_status && !/ready|ok/i.test(row.ingest_status)) reviewReasons.push(row.ingest_status);
+
+  const tier = score >= 70 ? 'Best Match' : (score >= 45 ? 'Maybe Match' : 'Needs Review');
+  return {
+    score: Math.max(0, Math.min(100, score)),
+    tier: tier,
+    reasons: reasons.join(' | '),
+    missing: missing.join(' | '),
+    reviewReason: reviewReasons.join(' | ')
+  };
+}
+
+function firstValue_(value) {
+  return String(value || '').split(/[|,;]/).map(function (item) { return item.trim(); }).filter(Boolean)[0] || '';
+}
+
+function extractSocialUrlsFromText_(text) {
+  const matches = String(text || '').match(/https?:\/\/[^\s|,]+/gi) || [];
+  return unique_(matches.map(cleanUrl_).filter(isSocialUrl_));
+}
+
+function compactJoin_(values, separator) {
+  return values.map(function (value) { return String(value || '').trim(); }).filter(Boolean).join(separator);
+}
+
+function appendAgentRunLogEntry_(sheet, entry) {
+  const now = new Date().toISOString();
+  sheet.appendRow([
+    'AR' + Utilities.formatString('%03d', Math.max(1, sheet.getLastRow())),
+    'Hermes',
+    now,
+    now,
+    entry.step || '',
+    entry.action_taken || '',
+    entry.input_ref || '',
+    entry.output_ref || '',
+    entry.status || 'Complete',
+    entry.notes || ''
+  ]);
 }
 
 function seedAgentControl_(sheet) {
@@ -178,7 +622,7 @@ function applyAgentValidations_(sheets) {
   setDropdown_(sheets.outreach, 'K2:K1000', ['Not Sent', 'Replied', 'Positive Reply', 'Not Interested', 'No Response']);
   setDropdown_(sheets.outreach, 'L2:L1000', ['Not Started', 'Booked', 'Converted', 'Lost']);
   setDropdown_(sheets.templateLibrary, 'E2:E1000', ['Active', 'Paused', 'Human Review', 'Archived']);
-  setDropdown_(sheets.agentControl, 'B2:B20', ['manual_approval_required', 'CAMP001', 'ROUND001', '10', 'No', 'Yes', 'Safe Auto', 'Baruch']);
+  sheets.agentControl.getRange('B2:B20').clearDataValidations();
 }
 
 function setDropdown_(sheet, rangeA1, values) {
@@ -198,21 +642,21 @@ function normalizeOutreachQueue_(sheet) {
   const subjectFormulas = [];
   const bodyFormulas = [];
   const statusFormulas = [];
-  const approvalValues = [];
+  const approvalFormulas = [];
 
   for (let row = 2; row <= maxRows; row += 1) {
     templateFormulas.push([`=IF(D${row}="","",CHOOSE(MOD(ROW()-2,4)+1,"T031","T032","T033","T034"))`]);
     subjectFormulas.push([`=IF(E${row}="","",SUBSTITUTE(INDEX('Template Library'!C:C,MATCH(E${row},'Template Library'!A:A,0)),"{brand_name}","this brand campaign"))`]);
     bodyFormulas.push([`=IF(E${row}="","",SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(INDEX('Template Library'!D:D,MATCH(E${row},'Template Library'!A:A,0)),"{creator_greeting}","there"),"{brand_name}","this brand campaign: "&Campaigns!N$2),"{sender_name}",INDEX('Agent Control'!B:B,MATCH("sender_name",'Agent Control'!A:A,0))))`]);
-    statusFormulas.push([`=IF(D${row}="","Blocked",IF(OR(Campaigns!N$2="",UPPER(Campaigns!N$2)="MISSING"),"Blocked","Needs Approval"))`]);
-    approvalValues.push(['FALSE']);
+    statusFormulas.push([`=IF(D${row}="","Blocked",IF(OR(Campaigns!N$2="",UPPER(Campaigns!N$2)="MISSING"),"Blocked",IF(I${row}="TRUE","Approved To Send","Needs Approval")))`]);
+    approvalFormulas.push([`=IFERROR(IF(INDEX('Review Queue'!F:F,MATCH(C${row},'Review Queue'!B:B,0))="Approved","TRUE","FALSE"),"FALSE")`]);
   }
 
   sheet.getRange(2, 5, rowCount, 1).setFormulas(templateFormulas);
   sheet.getRange(2, 6, rowCount, 1).setFormulas(subjectFormulas);
   sheet.getRange(2, 7, rowCount, 1).setFormulas(bodyFormulas);
   sheet.getRange(2, 8, rowCount, 1).setFormulas(statusFormulas);
-  sheet.getRange(2, 9, rowCount, 1).setValues(approvalValues);
+  sheet.getRange(2, 9, rowCount, 1).setFormulas(approvalFormulas);
 }
 
 function appendAgentRunLog_(sheet, now) {
