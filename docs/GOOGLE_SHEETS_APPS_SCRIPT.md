@@ -146,7 +146,7 @@ UGC Pipeline > Archive Current Run + Reset For New Staging
 ```
 
 3. Confirm the warning.
-4. The script copies the old run into:
+4. The script copies the old run into hidden archive tabs:
 
 ```text
 Archive Index
@@ -179,6 +179,20 @@ UGC Pipeline > Populate MVP From HTML Staging
 8. Check `MVP Control Center`.
 9. Review the new rows in `Review Queue`.
 10. Only rows marked `Approved` in `Review Queue` can move to `Approved To Send` in `Outreach Queue`.
+
+Archive tabs are hidden by default after reset so the workbook stays clean during normal operation.
+
+To inspect archive tabs:
+
+```text
+UGC Pipeline > Show Archive Tabs
+```
+
+To hide them again:
+
+```text
+UGC Pipeline > Hide Archive Tabs
+```
 
 ## How To Use It Safely
 

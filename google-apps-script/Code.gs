@@ -157,6 +157,8 @@ function onOpen() {
     .addItem('Setup Agent-First MVP', 'setupAgentFirstMvp')
     .addSeparator()
     .addItem('Archive Current Run + Reset For New Staging', 'archiveCurrentRunAndResetForNewStaging')
+    .addItem('Hide Archive Tabs', 'hideArchiveTabs')
+    .addItem('Show Archive Tabs', 'showArchiveTabs')
     .addItem('Populate MVP From HTML Staging', 'populateMvpFromHtmlStaging')
     .addItem('Refresh MVP Control Center', 'refreshMvpControlCenter')
     .addItem('Export Approved Outreach List', 'exportApprovedOutreachList')
@@ -242,6 +244,7 @@ function archiveCurrentRunAndResetForNewStaging() {
   });
 
   setControlValue_(agentControl, 'active_round_id', nextRoundId_(roundId));
+  hideArchiveTabs_(ss);
   refreshMvpControlCenter_(ss);
   appendAgentRunLogEntry_(agentRunLog, {
     step: 'archive_reset',
@@ -253,6 +256,36 @@ function archiveCurrentRunAndResetForNewStaging() {
   });
 
   ui.alert('Archive/reset complete. Archive run: ' + archiveRunId + '. Import your next CSV into HTML Staging, then run Populate MVP From HTML Staging.');
+}
+
+function hideArchiveTabs() {
+  hideArchiveTabs_(SpreadsheetApp.getActive());
+  SpreadsheetApp.getUi().alert('Archive tabs hidden.');
+}
+
+function showArchiveTabs() {
+  showArchiveTabs_(SpreadsheetApp.getActive());
+  SpreadsheetApp.getUi().alert('Archive tabs shown.');
+}
+
+function hideArchiveTabs_(ss) {
+  getArchiveSheetNames_().forEach(function (name) {
+    const sheet = ss.getSheetByName(name);
+    if (sheet) sheet.hideSheet();
+  });
+}
+
+function showArchiveTabs_(ss) {
+  getArchiveSheetNames_().forEach(function (name) {
+    const sheet = ss.getSheetByName(name);
+    if (sheet) sheet.showSheet();
+  });
+}
+
+function getArchiveSheetNames_() {
+  return ['Archive Index'].concat(ARCHIVE_SHEET_MAP.map(function (item) {
+    return item.archive;
+  }));
 }
 
 function populateMvpFromHtmlStaging() {

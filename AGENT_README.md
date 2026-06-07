@@ -243,6 +243,16 @@ Agent Control
 
 The function increments `Agent Control.active_round_id` using `nextRoundId_()`.
 
+Archive tabs are hidden automatically after this action to keep the workbook usable during normal operation.
+
+### `Hide Archive Tabs` and `Show Archive Tabs`
+
+Controls archive tab visibility.
+
+Hidden archive tabs are not deleted. They remain available for audit and recovery.
+
+Agents should use `Show Archive Tabs` only when inspecting previous runs, then use `Hide Archive Tabs` again before handing the workbook back to an operator.
+
 ### `Run first 10 enrichments` and `Run next blank enrichments`
 
 Legacy/lightweight portfolio enrichment POC.
@@ -433,6 +443,14 @@ If export returns zero rows:
 5. Confirm Campaigns!N2 has a media room URL.
 ```
 
+If archive tabs appear missing:
+
+```text
+1. Run UGC Pipeline > Show Archive Tabs.
+2. Inspect Archive Index and the Archive - ... tabs.
+3. Run UGC Pipeline > Hide Archive Tabs after inspection.
+```
+
 ## Do Not Do These Things
 
 Agents must not:
@@ -462,4 +480,3 @@ HTML Staging
 ```
 
 The MVP is not an autonomous outreach agent yet. It is an approval-gated creator sourcing and outreach-prep pipeline.
-
