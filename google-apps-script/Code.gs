@@ -196,12 +196,13 @@ function enrichPortfolio_(stagingRow, portfolioUrl, processedAt) {
   const title = extractTitle_(html);
   const links = extractLinks_(html, finalUrl);
   const text = htmlToVisibleText_(html);
+  const textReliable = text.length >= 250;
   const emails = unique_([].concat(extractEmails_(text), extractEmails_(links.join(' '))));
   const socialLinks = links.filter(isSocialUrl_);
-  const platformMentions = extractPlatformMentions_(text + ' ' + socialLinks.join(' '));
-  const metrics = extractMetrics_(text);
-  const categories = extractCategories_(text);
-  const brands = extractBrands_(text);
+  const platformMentions = textReliable ? extractPlatformMentions_(text + ' ' + socialLinks.join(' ')) : [];
+  const metrics = textReliable ? extractMetrics_(text) : { followers: [], views: [], likes: [], engagement: [] };
+  const categories = textReliable ? extractCategories_(text) : [];
+  const brands = textReliable ? extractBrands_(text) : [];
   const creatorName = extractCreatorName_(title, text, stagingRow.reddit_username);
   const reviewReasons = [];
 
@@ -242,7 +243,7 @@ function enrichPortfolio_(stagingRow, portfolioUrl, processedAt) {
 function buildOutreachDraft_(stagingRow, enrichment, processedAt) {
   const email = enrichment.portfolio_email || stagingRow.email || '';
   const name = enrichment.creator_name || enrichment.reddit_username || 'there';
-  const personalizedLine = buildPersonalizedLine_(enrichment);
+  const personalizedLine = buildPersonalizedLine_(enrichment, stagingRow);
 
   if (email) {
     return {
@@ -491,7 +492,12 @@ function scoreConfidence_(text, emails, socialLinks, metrics, reviewReasons) {
   return Math.max(0, Math.min(100, score));
 }
 
-function buildPersonalizedLine_(enrichment) {
+function buildPersonalizedLine_(enrichment, stagingRow) {
+  const confidence = Number(enrichment.confidence_score || 0);
+  if (enrichment.needs_review === 'Yes' || confidence < 50) {
+    if (stagingRow && stagingRow.comment_snippet) return 'I saw your Reddit comment about UGC work.';
+    return 'I saw your UGC creator information and wanted to reach out.';
+  }
   if (enrichment.categories_niches) {
     return 'I liked that your portfolio highlights ' + enrichment.categories_niches.split(' | ').slice(0, 2).join(' and ') + ' content.';
   }

@@ -383,7 +383,10 @@ function buildOutreach(enriched) {
   const email = enriched.email || enriched.portfolio_email || '';
   const name = enriched.creator_name || enriched.reddit_username;
   const category = String(enriched.creator_categories || '').split(' | ')[0] || 'UGC';
-  const personal = enriched.portfolio_summary || enriched.comment_snippet || `I saw your ${category} creator profile.`;
+  const lowConfidence = enriched.needs_review === 'Yes' || Number(enriched.confidence_score || 0) < 50;
+  const personal = lowConfidence
+    ? (enriched.comment_snippet || 'I saw your Reddit comment about UGC work.')
+    : (enriched.portfolio_summary || enriched.comment_snippet || `I saw your ${category} creator profile.`);
   if (email) {
     return {
       reddit_username: enriched.reddit_username,
@@ -394,7 +397,9 @@ function buildOutreach(enriched) {
       outreach_body: [
         `Hi ${name},`,
         '',
-        `I came across your portfolio and liked this angle: ${personal.slice(0, 180)}`,
+        lowConfidence
+          ? `I saw your Reddit comment and wanted to reach out directly.`
+          : `I came across your portfolio and liked this angle: ${personal.slice(0, 180)}`,
         '',
         'We are putting together a UGC creator shortlist for upcoming brand collaborations and I think your content could be a strong fit.',
         '',
@@ -473,13 +478,14 @@ export async function enrichRow(row) {
     const emails = uniqueList([...(text.match(EMAIL_RE) || []), ...(fetched.html.match(EMAIL_RE) || [])]).map(email => email.toLowerCase());
     const socialLinks = uniqueList([...(text.match(SOCIAL_RE) || []), ...links.filter(link => SOCIAL_URL_RE.test(link))]);
 
-    const metrics = {
+    const textTooSmall = text.length < 120;
+    const textReliable = !textTooSmall;
+    const metrics = textReliable ? {
       tiktok: extractMetricClaims(text, 'tiktok'),
       instagram: extractMetricClaims(text, 'instagram'),
       facebook: extractMetricClaims(text, 'facebook')
-    };
+    } : { tiktok: '', instagram: '', facebook: '' };
 
-    const textTooSmall = text.length < 120;
     const dynamicCanva = base.portfolio_url_type === 'canva_design' && textTooSmall;
     const enriched = {
       ...base,
@@ -490,18 +496,18 @@ export async function enrichRow(row) {
       location: extractLocation(text),
       portfolio_email: emails[0] || '',
       social_links: socialLinks.join(' | '),
-      platforms_found: extractPlatforms(text, socialLinks).join(' | '),
+      platforms_found: textReliable ? extractPlatforms(text, socialLinks).join(' | ') : '',
       claimed_tiktok_metrics: metrics.tiktok,
       claimed_instagram_metrics: metrics.instagram,
       claimed_facebook_metrics: metrics.facebook,
       strongest_platform: strongestPlatform(metrics),
-      parent_flag: flag(text, ['mom', 'mother', 'parent', 'dad', 'father', 'family']),
-      kids_flag: flag(text, ['kids', 'children', 'child', 'baby', 'toddler', 'son', 'daughter']),
-      gender_flag: extractGender(text),
-      creator_categories: extractCategories(text),
-      brands_worked_with: extractBrands(text),
-      years_experience: extractYears(text),
-      portfolio_summary: summarize(text),
+      parent_flag: textReliable ? flag(text, ['mom', 'mother', 'parent', 'dad', 'father', 'family']) : 'No',
+      kids_flag: textReliable ? flag(text, ['kids', 'children', 'child', 'baby', 'toddler', 'son', 'daughter']) : 'No',
+      gender_flag: textReliable ? extractGender(text) : '',
+      creator_categories: textReliable ? extractCategories(text) : '',
+      brands_worked_with: textReliable ? extractBrands(text) : '',
+      years_experience: textReliable ? extractYears(text) : '',
+      portfolio_summary: textReliable ? summarize(text) : '',
       needs_review: (!fetched.ok || textTooSmall || dynamicCanva) ? 'Yes' : 'No',
       review_reason: !fetched.ok
         ? `HTTP ${fetched.status}`
