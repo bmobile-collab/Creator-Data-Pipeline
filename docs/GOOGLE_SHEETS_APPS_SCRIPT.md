@@ -11,6 +11,7 @@ The Apps Script reads rows from a Google Sheets tab named `HTML Staging`, fetche
 - `Run Log`
 - `Creators`
 - `Evidence`
+- `Brand Brief`
 - `Matches`
 - `Review Queue`
 - `Outreach Queue`
@@ -108,6 +109,40 @@ It shows:
 - agent safety controls
 
 Anything marked `Fix`, `Check`, or `Review` needs attention before outreach moves forward.
+
+## Brand Brief
+
+Use `Brand Brief` to tell the workbook what the brand is looking for before running `Populate MVP From HTML Staging`.
+
+Important rows:
+
+```text
+brand_name
+media_room_url
+product_category
+campaign_goal
+creator_type_needed
+required_niches
+preferred_niches
+excluded_niches
+required_location
+required_platforms
+must_have_email
+```
+
+Use comma-separated values for niche, location, and platform fields.
+
+Example:
+
+```text
+required_niches: beauty, skincare
+preferred_niches: lifestyle, wellness
+excluded_niches: gambling, alcohol
+required_platforms: TikTok, Instagram
+must_have_email: Yes
+```
+
+`Populate MVP From HTML Staging` uses `Brand Brief` to score `Matches`.
 
 ## Export Approved Outreach List
 

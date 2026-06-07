@@ -50,6 +50,7 @@ HTML Staging
 Creators
 Evidence
 Campaigns
+Brand Brief
 Matches
 Review Queue
 Outreach Queue
@@ -106,6 +107,7 @@ Creates or repairs core tabs, headers, dropdowns, safe templates, control values
 Important behavior:
 
 - Preserves existing `Agent Control` values when they already exist.
+- Creates or preserves the `Brand Brief` tab.
 - Seeds safe outreach templates `T031` to `T034`.
 - Applies dropdowns to review, match, outreach, campaign, and template status columns.
 - Refreshes `MVP Control Center`.
@@ -328,6 +330,42 @@ N2 = brand_media_room_url
 
 If `Campaigns!N2` is blank or `MISSING`, outreach export must be blocked.
 
+## Brand Brief Rules
+
+`Brand Brief` is the brand intent layer. Agents should inspect it before judging match quality.
+
+The tab is key/value based:
+
+```text
+brief_key
+brief_value
+description
+```
+
+Important keys:
+
+```text
+brand_name
+media_room_url
+product_category
+campaign_goal
+creator_type_needed
+required_niches
+preferred_niches
+excluded_niches
+required_location
+required_platforms
+minimum_creator_requirements
+budget_range
+deliverables
+must_have_email
+notes
+```
+
+Fields such as `required_niches`, `preferred_niches`, `excluded_niches`, `required_location`, and `required_platforms` are comma-separated terms.
+
+`media_room_url` should match or support `Campaigns!N2`. If the user updates `Brand Brief.media_room_url`, keep `Campaigns!N2` aligned before export.
+
 ## Template Rules
 
 Safe auto templates are seeded in `Template Library`:
@@ -372,7 +410,7 @@ Agents should prefer `Evidence` over unsupported assumptions when explaining cre
 
 ## Matching Rules
 
-`Matches` is currently a lightweight fit-scoring layer.
+`Matches` is the brand-fit scoring layer.
 
 It records:
 
@@ -385,10 +423,35 @@ match_tier
 matched_reasons
 missing_requirements
 needs_review_reason
+brand_fit_notes
 created_at
 ```
 
-Do not treat match score as final approval. It is only a triage hint.
+Current scoring considers:
+
+```text
+email availability
+portfolio availability
+required niche term matches
+preferred niche term matches
+excluded term matches
+required platform term matches
+required location term matches
+source comment availability
+Canva design review risk
+ingest status
+```
+
+Tier rules:
+
+```text
+Best Match: score >= 75 and no excluded term
+Maybe Match: score >= 50 and no excluded term
+Needs Review: score < 50 and no excluded term
+Not Fit: excluded term found
+```
+
+Do not treat match score as final approval. It is only a triage hint. Human approval in `Review Queue` is still required.
 
 ## Archiving Rules
 

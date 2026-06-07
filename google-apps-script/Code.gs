@@ -45,7 +45,7 @@ const CAMPAIGNS_HEADERS = [
 
 const MATCHES_HEADERS = [
   'match_id', 'campaign_id', 'creator_id', 'match_score', 'match_tier',
-  'matched_reasons', 'missing_requirements', 'needs_review_reason', 'created_at'
+  'matched_reasons', 'missing_requirements', 'needs_review_reason', 'brand_fit_notes', 'created_at'
 ];
 
 const REVIEW_HEADERS = [
@@ -75,6 +75,8 @@ const AGENT_RUN_LOG_HEADERS = [
 
 const AGENT_CONTROL_HEADERS = ['control_key', 'control_value', 'description'];
 const CONTROL_CENTER_SHEET = 'MVP Control Center';
+const BRAND_BRIEF_SHEET = 'Brand Brief';
+const BRAND_BRIEF_HEADERS = ['brief_key', 'brief_value', 'description'];
 const APPROVED_EXPORT_SHEET = 'Approved Outreach Export';
 const APPROVED_EXPORT_HEADERS = [
   'exported_at',
@@ -176,6 +178,7 @@ function setupAgentFirstMvp() {
     creators: ensureSheet_(ss, 'Creators', CREATORS_HEADERS),
     evidence: ensureSheet_(ss, 'Evidence', EVIDENCE_HEADERS),
     campaigns: ensureSheet_(ss, 'Campaigns', CAMPAIGNS_HEADERS),
+    brandBrief: ensureSheet_(ss, BRAND_BRIEF_SHEET, BRAND_BRIEF_HEADERS),
     matches: ensureSheet_(ss, 'Matches', MATCHES_HEADERS),
     review: ensureSheet_(ss, 'Review Queue', REVIEW_HEADERS),
     outreach: ensureSheet_(ss, 'Outreach Queue', OUTREACH_QUEUE_HEADERS),
@@ -191,6 +194,7 @@ function setupAgentFirstMvp() {
   };
 
   seedAgentControl_(sheets.agentControl);
+  seedBrandBrief_(sheets.brandBrief, sheets.campaigns);
   seedSafeTemplates_(sheets.templateLibrary);
   seedTemplatePerformance_(sheets.templatePerformance);
   applyAgentValidations_(sheets);
@@ -310,6 +314,7 @@ function populateMvpFromHtmlStaging() {
     creators: ensureSheet_(ss, 'Creators', CREATORS_HEADERS),
     evidence: ensureSheet_(ss, 'Evidence', EVIDENCE_HEADERS),
     campaigns: ensureSheet_(ss, 'Campaigns', CAMPAIGNS_HEADERS),
+    brandBrief: ensureSheet_(ss, BRAND_BRIEF_SHEET, BRAND_BRIEF_HEADERS),
     matches: ensureSheet_(ss, 'Matches', MATCHES_HEADERS),
     review: ensureSheet_(ss, 'Review Queue', REVIEW_HEADERS),
     outreach: ensureSheet_(ss, 'Outreach Queue', OUTREACH_QUEUE_HEADERS),
@@ -321,6 +326,7 @@ function populateMvpFromHtmlStaging() {
   };
 
   seedSafeTemplates_(sheets.templateLibrary);
+  seedBrandBrief_(sheets.brandBrief, sheets.campaigns);
   seedTemplatePerformance_(sheets.templatePerformance);
   applyAgentValidations_(sheets);
 
@@ -332,6 +338,7 @@ function populateMvpFromHtmlStaging() {
 
   const roundId = getControlValue_(sheets.agentControl, 'active_round_id') || 'ROUND001';
   const campaignId = getControlValue_(sheets.agentControl, 'active_campaign_id') || 'CAMP001';
+  const brandBrief = readBrandBrief_(sheets.brandBrief, sheets.campaigns);
   const creatorRows = [];
   const evidenceRows = [];
   const matchRows = [];
@@ -384,7 +391,7 @@ function populateMvpFromHtmlStaging() {
       evidenceRows.push(buildEvidenceRow_(evidenceCounter++, creatorId, 'all_urls', allUrls, row.comment_snippet, 'reddit_comment', sourceUrl, 45, now));
     }
 
-    const match = buildMatchAssessment_(row, email, portfolioUrl);
+    const match = buildMatchAssessment_(row, email, portfolioUrl, brandBrief);
     matchRows.push([
       'M' + Utilities.formatString('%03d', index + 1),
       campaignId,
@@ -394,6 +401,7 @@ function populateMvpFromHtmlStaging() {
       match.reasons,
       match.missing,
       match.reviewReason,
+      match.brandFitNotes,
       now
     ]);
 
@@ -459,22 +467,27 @@ function refreshMvpControlCenter_(ss) {
     ['current_round_id', '=IFERROR(INDEX(\'Agent Control\'!B:B,MATCH("active_round_id",\'Agent Control\'!A:A,0)),"Missing")', '=IF(B2="Missing","Fix","OK")', 'Active sourcing round for this workbook.'],
     ['active_campaign_id', '=IFERROR(INDEX(\'Agent Control\'!B:B,MATCH("active_campaign_id",\'Agent Control\'!A:A,0)),"Missing")', '=IF(B3="Missing","Fix","OK")', 'Campaign used by Matches and Outreach Queue.'],
     ['brand_media_room_url', '=Campaigns!N2', '=IF(OR(B4="",UPPER(B4)="MISSING"),"Fix","OK")', 'Must be filled before outreach can be approved.'],
-    ['staging_creator_rows', '=MAX(COUNTA(\'HTML Staging\'!D:D)-1,0)', '=IF(B5=0,"Check","OK")', 'Rows available from the latest HTML export.'],
-    ['creator_rows', '=MAX(COUNTA(Creators!A:A)-1,0)', '=IF(B6=B5,"OK","Check")', 'Creators generated from HTML Staging.'],
-    ['email_ready_count', '=COUNTIF(Creators!E:E,"Email")', '=IF(B7>0,"OK","Check")', 'Creators with email contact method.'],
-    ['reddit_dm_count', '=COUNTIF(Creators!E:E,"Reddit DM")', '=IF(B8>0,"Info","OK")', 'Creators without email but with Reddit comment URL.'],
-    ['missing_contact_count', '=COUNTIF(Creators!E:E,"Missing")', '=IF(B9>0,"Review","OK")', 'Creators missing contact method.'],
-    ['needs_review_count', '=COUNTIFS(\'Review Queue\'!A:A,"<>",\'Review Queue\'!F:F,"")', '=IF(B10>0,"Review","OK")', 'Review rows still waiting for human decision.'],
-    ['approved_review_count', '=COUNTIFS(\'Review Queue\'!A:A,"<>",\'Review Queue\'!F:F,"Approved")', '=IF(B11>0,"OK","Info")', 'Creators approved by a human.'],
-    ['blocked_outreach_count', '=COUNTIFS(\'Outreach Queue\'!A:A,"<>",\'Outreach Queue\'!H:H,"Blocked")', '=IF(B12>0,"Info","OK")', 'Blocked because email or media room URL is missing.'],
-    ['needs_approval_count', '=COUNTIFS(\'Outreach Queue\'!A:A,"<>",\'Outreach Queue\'!H:H,"Needs Approval")', '=IF(B13>0,"Review","OK")', 'Email rows waiting for human approval.'],
-    ['approved_to_send_count', '=COUNTIFS(\'Outreach Queue\'!A:A,"<>",\'Outreach Queue\'!H:H,"Approved To Send")', '=IF(B14>0,"Ready","Info")', 'Drafts unlocked by human approval.'],
-    ['last_archive_run_id', '=IFERROR(INDEX(\'Archive Index\'!A:A,MAX(FILTER(ROW(\'Archive Index\'!A:A),\'Archive Index\'!A:A<>"",\'Archive Index\'!A:A<>"archive_run_id"))),"None")', '=IF(B15="None","Info","OK")', 'Most recent archive snapshot ID.'],
-    ['last_populate_run_at', '=IFERROR(INDEX(\'Agent Run Log\'!C:C,MAX(FILTER(ROW(\'Agent Run Log\'!E:E),\'Agent Run Log\'!E:E="populate_from_html_staging"))),"None")', '=IF(B16="None","Check","OK")', 'Most recent staging-to-MVP populate run.'],
-    ['approved_export_rows', '=MAX(COUNTA(\'Approved Outreach Export\'!C:C)-1,0)', '=IF(B17>0,"Ready","Info")', 'Rows currently available in Approved Outreach Export.'],
-    ['last_approved_export_at', '=IFERROR(INDEX(\'Agent Run Log\'!C:C,MAX(FILTER(ROW(\'Agent Run Log\'!E:E),\'Agent Run Log\'!E:E="export_approved_outreach"))),"None")', '=IF(B18="None","Info","OK")', 'Most recent approved export run.'],
-    ['agent_mode', '=IFERROR(INDEX(\'Agent Control\'!B:B,MATCH("agent_mode",\'Agent Control\'!A:A,0)),"Missing")', '=IF(B19="manual_approval_required","OK","Fix")', 'Hermes/agent must remain human approval gated.'],
-    ['auto_outreach_allowed', '=IFERROR(INDEX(\'Agent Control\'!B:B,MATCH("allow_auto_outreach",\'Agent Control\'!A:A,0)),"Missing")', '=IF(B20="No","OK","Fix")', 'Must stay No for MVP.']
+    ['brief_required_niches', '=IFERROR(INDEX(\'Brand Brief\'!B:B,MATCH("required_niches",\'Brand Brief\'!A:A,0)),"")', '=IF(B5="","Check","OK")', 'Brand-fit matching uses this for required niche terms.'],
+    ['brief_required_platforms', '=IFERROR(INDEX(\'Brand Brief\'!B:B,MATCH("required_platforms",\'Brand Brief\'!A:A,0)),"")', '=IF(B6="","Info","OK")', 'Optional platform terms for matching.'],
+    ['staging_creator_rows', '=MAX(COUNTA(\'HTML Staging\'!D:D)-1,0)', '=IF(B7=0,"Check","OK")', 'Rows available from the latest HTML export.'],
+    ['creator_rows', '=MAX(COUNTA(Creators!A:A)-1,0)', '=IF(B8=B7,"OK","Check")', 'Creators generated from HTML Staging.'],
+    ['best_match_count', '=COUNTIF(Matches!E:E,"Best Match")', '=IF(B9>0,"Ready","Info")', 'Creators currently ranked Best Match.'],
+    ['maybe_match_count', '=COUNTIF(Matches!E:E,"Maybe Match")', '=IF(B10>0,"Info","OK")', 'Creators currently ranked Maybe Match.'],
+    ['not_fit_count', '=COUNTIF(Matches!E:E,"Not Fit")', '=IF(B11>0,"Review","OK")', 'Creators blocked by excluded terms or low fit.'],
+    ['email_ready_count', '=COUNTIF(Creators!E:E,"Email")', '=IF(B12>0,"OK","Check")', 'Creators with email contact method.'],
+    ['reddit_dm_count', '=COUNTIF(Creators!E:E,"Reddit DM")', '=IF(B13>0,"Info","OK")', 'Creators without email but with Reddit comment URL.'],
+    ['missing_contact_count', '=COUNTIF(Creators!E:E,"Missing")', '=IF(B14>0,"Review","OK")', 'Creators missing contact method.'],
+    ['needs_review_count', '=COUNTIFS(\'Review Queue\'!A:A,"<>",\'Review Queue\'!F:F,"")', '=IF(B15>0,"Review","OK")', 'Review rows still waiting for human decision.'],
+    ['approved_review_count', '=COUNTIFS(\'Review Queue\'!A:A,"<>",\'Review Queue\'!F:F,"Approved")', '=IF(B16>0,"OK","Info")', 'Creators approved by a human.'],
+    ['blocked_outreach_count', '=COUNTIFS(\'Outreach Queue\'!A:A,"<>",\'Outreach Queue\'!H:H,"Blocked")', '=IF(B17>0,"Info","OK")', 'Blocked because email or media room URL is missing.'],
+    ['needs_approval_count', '=COUNTIFS(\'Outreach Queue\'!A:A,"<>",\'Outreach Queue\'!H:H,"Needs Approval")', '=IF(B18>0,"Review","OK")', 'Email rows waiting for human approval.'],
+    ['approved_to_send_count', '=COUNTIFS(\'Outreach Queue\'!A:A,"<>",\'Outreach Queue\'!H:H,"Approved To Send")', '=IF(B19>0,"Ready","Info")', 'Drafts unlocked by human approval.'],
+    ['last_archive_run_id', '=IFERROR(INDEX(\'Archive Index\'!A:A,MAX(FILTER(ROW(\'Archive Index\'!A:A),\'Archive Index\'!A:A<>"",\'Archive Index\'!A:A<>"archive_run_id"))),"None")', '=IF(B20="None","Info","OK")', 'Most recent archive snapshot ID.'],
+    ['last_populate_run_at', '=IFERROR(INDEX(\'Agent Run Log\'!C:C,MAX(FILTER(ROW(\'Agent Run Log\'!E:E),\'Agent Run Log\'!E:E="populate_from_html_staging"))),"None")', '=IF(B21="None","Check","OK")', 'Most recent staging-to-MVP populate run.'],
+    ['approved_export_rows', '=MAX(COUNTA(\'Approved Outreach Export\'!C:C)-1,0)', '=IF(B22>0,"Ready","Info")', 'Rows currently available in Approved Outreach Export.'],
+    ['last_approved_export_at', '=IFERROR(INDEX(\'Agent Run Log\'!C:C,MAX(FILTER(ROW(\'Agent Run Log\'!E:E),\'Agent Run Log\'!E:E="export_approved_outreach"))),"None")', '=IF(B23="None","Info","OK")', 'Most recent approved export run.'],
+    ['agent_mode', '=IFERROR(INDEX(\'Agent Control\'!B:B,MATCH("agent_mode",\'Agent Control\'!A:A,0)),"Missing")', '=IF(B24="manual_approval_required","OK","Fix")', 'Hermes/agent must remain human approval gated.'],
+    ['auto_outreach_allowed', '=IFERROR(INDEX(\'Agent Control\'!B:B,MATCH("allow_auto_outreach",\'Agent Control\'!A:A,0)),"Missing")', '=IF(B25="No","OK","Fix")', 'Must stay No for MVP.']
   ];
 
   sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
@@ -657,39 +670,177 @@ function scoreStagingConfidence_(row, email, portfolioUrl) {
   return Math.max(0, Math.min(100, score));
 }
 
-function buildMatchAssessment_(row, email, portfolioUrl) {
+function seedBrandBrief_(sheet, campaignsSheet) {
+  const existing = {};
+  readSheetObjects_(sheet).forEach(function (row) {
+    if (row.brief_key) existing[row.brief_key] = row.brief_value;
+  });
+
+  const campaign = readSheetObjects_(campaignsSheet)[0] || {};
+  const rows = [
+    ['brief_key', 'brief_value', 'description'],
+    ['brand_name', existing.brand_name || campaign.brand_name || '', 'Brand name used for campaign context.'],
+    ['media_room_url', existing.media_room_url || campaign.brand_media_room_url || '', 'Brand media room URL. Also keep Campaigns!N2 filled.'],
+    ['product_category', existing.product_category || campaign.product_category || '', 'Main product category.'],
+    ['campaign_goal', existing.campaign_goal || '', 'What the brand wants from this creator search.'],
+    ['creator_type_needed', existing.creator_type_needed || 'UGC creator', 'Creator type requested by the brand.'],
+    ['required_niches', existing.required_niches || campaign.required_tags || '', 'Comma-separated terms that should appear in creator evidence/comment/url.'],
+    ['preferred_niches', existing.preferred_niches || campaign.preferred_tags || '', 'Comma-separated nice-to-have creator terms.'],
+    ['excluded_niches', existing.excluded_niches || campaign.excluded_tags || '', 'Comma-separated terms that should lower or block fit.'],
+    ['required_location', existing.required_location || campaign.location_preference || '', 'Comma-separated location terms if location matters.'],
+    ['required_platforms', existing.required_platforms || '', 'Comma-separated platforms such as TikTok, Instagram, YouTube, Amazon.'],
+    ['minimum_creator_requirements', existing.minimum_creator_requirements || '', 'Free-text requirements for human review.'],
+    ['budget_range', existing.budget_range || '', 'Campaign budget range.'],
+    ['deliverables', existing.deliverables || '', 'Expected deliverables.'],
+    ['must_have_email', existing.must_have_email || 'Yes', 'Yes means creators without email are not outreach-ready.'],
+    ['notes', existing.notes || '', 'Operator notes for this campaign.']
+  ];
+
+  sheet.clearContents();
+  sheet.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
+  sheet.setFrozenRows(1);
+  sheet.getRange('A1:C1').setFontWeight('bold');
+  sheet.autoResizeColumns(1, 3);
+  if (existing.media_room_url) campaignsSheet.getRange('N2').setValue(existing.media_room_url);
+}
+
+function readBrandBrief_(sheet, campaignsSheet) {
+  const brief = {};
+  readSheetObjects_(sheet).forEach(function (row) {
+    if (row.brief_key) brief[row.brief_key] = row.brief_value || '';
+  });
+  const campaign = readSheetObjects_(campaignsSheet)[0] || {};
+  return {
+    brandName: brief.brand_name || campaign.brand_name || '',
+    mediaRoomUrl: brief.media_room_url || campaign.brand_media_room_url || '',
+    productCategory: brief.product_category || campaign.product_category || '',
+    campaignGoal: brief.campaign_goal || '',
+    creatorTypeNeeded: brief.creator_type_needed || 'UGC creator',
+    requiredNiches: splitTerms_(brief.required_niches || campaign.required_tags || ''),
+    preferredNiches: splitTerms_(brief.preferred_niches || campaign.preferred_tags || ''),
+    excludedNiches: splitTerms_(brief.excluded_niches || campaign.excluded_tags || ''),
+    requiredLocation: splitTerms_(brief.required_location || campaign.location_preference || ''),
+    requiredPlatforms: splitTerms_(brief.required_platforms || ''),
+    mustHaveEmail: String(brief.must_have_email || 'Yes').toLowerCase() !== 'no',
+    minimumCreatorRequirements: brief.minimum_creator_requirements || '',
+    deliverables: brief.deliverables || '',
+    budgetRange: brief.budget_range || '',
+    notes: brief.notes || ''
+  };
+}
+
+function buildMatchAssessment_(row, email, portfolioUrl, brandBrief) {
   const reasons = [];
   const missing = [];
   const reviewReasons = [];
+  const brandFitNotes = [];
+  const evidenceText = buildCreatorEvidenceText_(row);
+  const brief = brandBrief || {};
   let score = 20;
 
   if (email) {
-    score += 35;
+    score += 20;
     reasons.push('email_available');
-  } else {
+  } else if (brief.mustHaveEmail) {
     missing.push('email');
   }
 
   if (portfolioUrl) {
-    score += 25;
+    score += 15;
     reasons.push('portfolio_available');
   } else {
     missing.push('portfolio');
     reviewReasons.push('No portfolio URL in staging');
   }
 
+  const requiredNicheMatches = findTermMatches_(brief.requiredNiches || [], evidenceText);
+  const preferredNicheMatches = findTermMatches_(brief.preferredNiches || [], evidenceText);
+  const excludedMatches = findTermMatches_(brief.excludedNiches || [], evidenceText);
+  const platformMatches = findTermMatches_(brief.requiredPlatforms || [], evidenceText);
+  const locationMatches = findTermMatches_(brief.requiredLocation || [], evidenceText);
+
+  if (requiredNicheMatches.length) {
+    score += Math.min(30, requiredNicheMatches.length * 12);
+    reasons.push('required_niche:' + requiredNicheMatches.join(','));
+  } else if ((brief.requiredNiches || []).length) {
+    score -= 20;
+    missing.push('required_niche');
+    reviewReasons.push('No required niche match found');
+  }
+
+  if (preferredNicheMatches.length) {
+    score += Math.min(15, preferredNicheMatches.length * 6);
+    reasons.push('preferred_niche:' + preferredNicheMatches.join(','));
+  }
+
+  if (platformMatches.length) {
+    score += Math.min(15, platformMatches.length * 8);
+    reasons.push('platform:' + platformMatches.join(','));
+  } else if ((brief.requiredPlatforms || []).length) {
+    score -= 10;
+    missing.push('platform');
+  }
+
+  if (locationMatches.length) {
+    score += 10;
+    reasons.push('location:' + locationMatches.join(','));
+  } else if ((brief.requiredLocation || []).length) {
+    score -= 10;
+    missing.push('location');
+  }
+
+  if (excludedMatches.length) {
+    score -= 45;
+    missing.push('excluded_term:' + excludedMatches.join(','));
+    reviewReasons.push('Excluded term found: ' + excludedMatches.join(', '));
+  }
+
   if (row.reddit_comment_url) reasons.push('reddit_comment_source');
   if (row.portfolio_url_type === 'canva_design') reviewReasons.push('Canva design may need manual review');
   if (row.ingest_status && !/ready|ok/i.test(row.ingest_status)) reviewReasons.push(row.ingest_status);
 
-  const tier = score >= 70 ? 'Best Match' : (score >= 45 ? 'Maybe Match' : 'Needs Review');
+  if ((brief.requiredNiches || []).length) brandFitNotes.push('required_niches=' + brief.requiredNiches.join(', '));
+  if ((brief.preferredNiches || []).length) brandFitNotes.push('preferred_niches=' + brief.preferredNiches.join(', '));
+  if ((brief.requiredPlatforms || []).length) brandFitNotes.push('required_platforms=' + brief.requiredPlatforms.join(', '));
+
+  const boundedScore = Math.max(0, Math.min(100, score));
+  const tier = excludedMatches.length ? 'Not Fit' : (boundedScore >= 75 ? 'Best Match' : (boundedScore >= 50 ? 'Maybe Match' : 'Needs Review'));
   return {
-    score: Math.max(0, Math.min(100, score)),
+    score: boundedScore,
     tier: tier,
     reasons: reasons.join(' | '),
     missing: missing.join(' | '),
-    reviewReason: reviewReasons.join(' | ')
+    reviewReason: reviewReasons.join(' | '),
+    brandFitNotes: brandFitNotes.join(' | ')
   };
+}
+
+function buildCreatorEvidenceText_(row) {
+  return [
+    row.reddit_username,
+    row.email,
+    row.portfolio_url,
+    row.portfolio_url_type,
+    row.all_urls,
+    row.all_emails,
+    row.comment_snippet,
+    row.source_post_title,
+    row.ingest_notes
+  ].join(' ').toLowerCase();
+}
+
+function splitTerms_(value) {
+  return String(value || '')
+    .split(/[,\n|;]/)
+    .map(function (term) { return term.trim().toLowerCase(); })
+    .filter(Boolean);
+}
+
+function findTermMatches_(terms, text) {
+  const source = String(text || '').toLowerCase();
+  return unique_(terms.filter(function (term) {
+    return term && source.indexOf(term.toLowerCase()) !== -1;
+  }));
 }
 
 function firstValue_(value) {
@@ -783,6 +934,7 @@ function applyAgentValidations_(sheets) {
   setDropdown_(sheets.outreach, 'K2:K1000', ['Not Sent', 'Replied', 'Positive Reply', 'Not Interested', 'No Response']);
   setDropdown_(sheets.outreach, 'L2:L1000', ['Not Started', 'Booked', 'Converted', 'Lost']);
   setDropdown_(sheets.templateLibrary, 'E2:E1000', ['Active', 'Paused', 'Human Review', 'Archived']);
+  if (sheets.brandBrief) setDropdown_(sheets.brandBrief, 'B16:B16', ['Yes', 'No']);
   sheets.agentControl.getRange('B2:B20').clearDataValidations();
 }
 
@@ -1096,7 +1248,8 @@ function ensureSheet_(ss, name, headers) {
   } else {
     const existing = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
     const needsHeaders = existing.join('').trim() === '';
-    if (needsHeaders) sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    const headersChanged = existing.map(String).join('|') !== headers.map(String).join('|');
+    if (needsHeaders || headersChanged) sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   }
   return sheet;
 }
